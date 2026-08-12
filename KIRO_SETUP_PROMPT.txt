@@ -1,0 +1,191 @@
+═══════════════════════════════════════════════════════════════════════════════
+  KIRO SETUP PROMPT - AI Smart Investment Portfolio Advisor
+  Copy this entire prompt and paste it into Kiro on your new laptop
+═══════════════════════════════════════════════════════════════════════════════
+
+I have extracted the "AI Smart Investment Portfolio Advisor" project ZIP file on my laptop. 
+Please set up and run this complete investment advisory application.
+
+PROJECT LOCATION: [Replace this with your extracted folder path, e.g., C:\Users\YourName\AI Smart Investment Portfolio Advisor]
+
+═══════════════════════════════════════════════════════════════════════════════
+SYSTEM REQUIREMENTS CHECK
+═══════════════════════════════════════════════════════════════════════════════
+
+First, verify I have the required software installed:
+1. Python 3.12 or higher
+2. Node.js 18 or higher with npm
+3. Ollama (for AI features)
+
+If anything is missing, guide me to install it.
+
+═══════════════════════════════════════════════════════════════════════════════
+SETUP TASKS (Execute in Order)
+═══════════════════════════════════════════════════════════════════════════════
+
+TASK 1: BACKEND SETUP
+─────────────────────
+Navigate to: [PROJECT_PATH]/backend/
+
+1. Create a Python virtual environment named "venv"
+2. Activate the virtual environment
+3. Install all Python dependencies from requirements.txt
+4. Verify the .env configuration file exists (it should already be there)
+5. Confirm all packages installed successfully
+
+TASK 2: GENERATE ML DATASET
+────────────────────────────
+While in the backend directory with venv activated:
+
+1. Run: python ml/generate_investor_dataset.py
+2. Verify output files created:
+   - datasets/investor_risk_dataset.csv (should have 50,000 records)
+   - datasets/dataset_report.txt
+3. Show me the dataset statistics from the report
+
+TASK 3: FRONTEND SETUP
+──────────────────────
+Navigate to: [PROJECT_PATH]/frontend/
+
+1. Install all Node.js dependencies using npm install
+2. Verify the .env file exists (it should already be there)
+3. Confirm node_modules folder created successfully
+4. Show me if there are any installation warnings or errors
+
+TASK 4: OLLAMA AI SERVICE SETUP
+────────────────────────────────
+1. Check if Ollama is installed and running
+2. If Ollama is not installed, guide me through installation
+3. Pull the AI model: ollama pull qwen2.5:3b
+4. Verify Ollama is running by checking: http://localhost:11434/api/tags
+5. Confirm qwen2.5:3b model is available
+
+TASK 5: START THE SERVERS
+──────────────────────────
+I need TWO terminals running simultaneously:
+
+TERMINAL 1 - Backend Server:
+- Navigate to: [PROJECT_PATH]/backend/
+- Activate virtual environment
+- Run: uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+- Keep this terminal running
+
+TERMINAL 2 - Frontend Server:
+- Navigate to: [PROJECT_PATH]/frontend/
+- Run: npm start
+- Keep this terminal running
+
+Start both servers and monitor their startup logs.
+
+TASK 6: VERIFICATION
+────────────────────
+Once both servers are running, verify:
+
+1. Backend API Health:
+   - Check: http://127.0.0.1:8000/health
+   - Should return: {"status":"healthy","version":"1.0.0"}
+
+2. Backend API Documentation:
+   - Open: http://127.0.0.1:8000/docs
+   - Should show interactive Swagger UI
+
+3. Ollama AI Service:
+   - Check: http://127.0.0.1:8000/api/ollama/health
+   - Should return Ollama status and model info
+
+4. Frontend Application:
+   - Open: http://localhost:3000
+   - Should show the login/register page
+
+5. Database File:
+   - Verify file exists: backend/investment_advisor.db
+   - Backend logs should show: "✅ Database tables created successfully!"
+
+TASK 7: CREATE TEST ACCOUNT
+────────────────────────────
+1. Open http://localhost:3000 in browser
+2. Click "Sign up" or go to /register
+3. Create account with:
+   - Email: test@example.com
+   - Password: test123
+   - Full Name: Test User
+4. Login with these credentials
+5. Verify you can access the dashboard
+
+═══════════════════════════════════════════════════════════════════════════════
+EXPECTED FINAL STATE
+═══════════════════════════════════════════════════════════════════════════════
+
+After successful setup, I should have:
+
+✅ Backend server running at: http://127.0.0.1:8000
+✅ Frontend server running at: http://localhost:3000
+✅ Ollama AI service running at: http://localhost:11434
+✅ Database file created: backend/investment_advisor.db
+✅ Dataset generated: backend/datasets/investor_risk_dataset.csv (50,000 records)
+✅ Virtual environment: backend/venv/ (activated)
+✅ Node modules: frontend/node_modules/ (installed)
+✅ Test account created and can login
+✅ All 12 application pages accessible:
+   - Dashboard
+   - Financial Profile
+   - Risk Assessment
+   - Portfolio Recommendation
+   - Portfolio Tracking
+   - Portfolio Analytics
+   - Diversification Analysis
+   - Monte Carlo Simulation
+   - SIP Planner
+   - Stock Explorer
+   - AI Advisor
+   - Settings
+
+═══════════════════════════════════════════════════════════════════════════════
+IMPORTANT NOTES
+═══════════════════════════════════════════════════════════════════════════════
+
+1. PATHS: All configuration files (.env) are already included in the ZIP
+2. NO MANUAL CONFIGURATION NEEDED: Default settings work out of the box
+3. DATABASE: SQLite database auto-creates on first backend run
+4. AI MODEL: qwen2.5:3b is ~2GB download, will take a few minutes
+5. KEEP TERMINALS RUNNING: Both backend and frontend need to stay active
+6. DEPENDENCIES: Everything needed is in requirements.txt and package.json
+
+═══════════════════════════════════════════════════════════════════════════════
+IF ERRORS OCCUR
+═══════════════════════════════════════════════════════════════════════════════
+
+If you encounter any errors during setup:
+
+1. Show me the complete error message
+2. Show me which step failed
+3. Show me the terminal output logs
+4. I'll help troubleshoot based on the specific error
+
+Common issues and solutions:
+- "Port already in use" → Kill process on that port and retry
+- "Module not found" → Reinstall dependencies
+- "Ollama not responding" → Start Ollama service
+- "Permission denied" → Run terminal as administrator (Windows) or use sudo (Mac/Linux)
+
+═══════════════════════════════════════════════════════════════════════════════
+AFTER SUCCESSFUL SETUP
+═══════════════════════════════════════════════════════════════════════════════
+
+Once everything is running, guide me through:
+1. Testing the main features (Risk Assessment, Portfolio Recommendation, etc.)
+2. Verifying AI explanations are working
+3. Checking that stock data loads properly
+4. Confirming Monte Carlo simulations run successfully
+
+═══════════════════════════════════════════════════════════════════════════════
+ACTION REQUIRED
+═══════════════════════════════════════════════════════════════════════════════
+
+Please begin the setup process now. Execute each task in order and keep me 
+updated on the progress. If you need any information from me (like the exact 
+project path), ask me before proceeding.
+
+Start with TASK 1: Backend Setup.
+
+═══════════════════════════════════════════════════════════════════════════════

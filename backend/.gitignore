@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# Database — never commit, auto-created on first run
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment — use .env.example as reference
+.env
+.env.local
+
+# Generated datasets — large files, regenerate with: python ml/generate_investor_dataset.py
+datasets/investor_risk_dataset.csv
+datasets/dataset_report.txt
+
+# Trained ML model artifacts
+*.pkl
+*.joblib
+*.h5
+*.model
+models/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
