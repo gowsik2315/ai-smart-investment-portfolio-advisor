@@ -40,15 +40,30 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
+  /**
+   * Extract a human-readable message from a FastAPI error response.
+   * FastAPI validation errors (422) return detail as an array of objects;
+   * application errors (400, 401, etc.) return detail as a plain string.
+   */
+  const extractErrorMessage = (error, fallback) => {
+    const detail = error.response?.data?.detail;
+    if (!detail) return fallback;
+    if (Array.isArray(detail)) {
+      // 422 Unprocessable Entity — array of { loc, msg, type }
+      return detail.map((e) => e.msg).join(', ');
+    }
+    return detail;
+  };
+
   const login = async (credentials) => {
     try {
       const response = await authService.login(credentials);
       setUser(response.user);
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.detail || 'Login failed' 
+      return {
+        success: false,
+        error: extractErrorMessage(error, 'Login failed'),
       };
     }
   };
@@ -58,9 +73,9 @@ export const AuthProvider = ({ children }) => {
       await authService.register(userData);
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.detail || 'Registration failed' 
+      return {
+        success: false,
+        error: extractErrorMessage(error, 'Registration failed'),
       };
     }
   };

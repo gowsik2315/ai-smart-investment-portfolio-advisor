@@ -57,7 +57,8 @@ async def analyze_portfolio(
             risk_free_rate=analysis_result['risk_free_rate'],
             data_points=analysis_result['data_points'],
             analysis_period_days=analysis_result['analysis_period_days'],
-            portfolio_data=portfolio_data
+            portfolio_data=portfolio_data,
+            ai_explanation=None  # reset cache so /explain generates a fresh AI response
         )
         
         db.add(db_analysis)
@@ -95,7 +96,8 @@ async def get_latest_analysis(db: Session = Depends(get_db)):
         risk_free_rate=analysis.risk_free_rate,
         data_points=analysis.data_points,
         analysis_period_days=analysis.analysis_period_days,
-        interpretation=RiskInterpretation(**interpretation)
+        interpretation=RiskInterpretation(**interpretation),
+        ai_explanation=analysis.ai_explanation  # ← include cached AI explanation
     )
 
 
@@ -143,32 +145,15 @@ async def explain_portfolio_analysis(db: Session = Depends(get_db)):
         }
     
     # Generate new AI explanation if not cached
-    prompt = f"""Analyze this portfolio risk profile and provide actionable insights:
+    prompt = f"""Portfolio metrics: Risk Score {analysis.risk_score:.1f}/100 ({analysis.risk_level}), Volatility {analysis.volatility_percent:.1f}%, Sharpe Ratio {analysis.sharpe_ratio:.2f}, Max Drawdown {analysis.max_drawdown_percent:.1f}%, Avg Annual Return {analysis.average_return_percent:.1f}%.
 
-**Portfolio Risk Metrics:**
-- Risk Score: {analysis.risk_score:.1f}/100
-- Risk Level: {analysis.risk_level}
-- Volatility (Annualized): {analysis.volatility_percent:.2f}%
-- Sharpe Ratio: {analysis.sharpe_ratio:.2f}
-- Maximum Drawdown: {analysis.max_drawdown_percent:.2f}%
-- Average Annual Return: {analysis.average_return_percent:.2f}%
-- Total Return: {analysis.total_return:.2f}%
-
-**Analysis Period:** {analysis.analysis_period_days} days with {analysis.data_points} data points
-
-Please provide:
-1. What these metrics reveal about portfolio risk and performance
-2. Is this risk level appropriate for different investor types?
-3. Specific recommendations to improve risk-adjusted returns
-4. Red flags or concerns based on these numbers
-5. Action items for portfolio optimization
-
-Keep it practical, data-driven, and actionable. Use markdown formatting."""
+In 3 short points explain: (1) what these numbers mean, (2) is this risk level appropriate, (3) one key action to improve returns. Be concise and practical."""
 
     result = await ollama_service.generate_explanation(
         prompt=prompt,
         system_prompt=OllamaPrompts.SYSTEM_FINANCIAL_ADVISOR,
-        temperature=0.7
+        temperature=0.7,
+        max_tokens=400
     )
     
     # Cache the AI explanation in database

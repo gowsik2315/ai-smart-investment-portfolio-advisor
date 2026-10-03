@@ -3,23 +3,7 @@
  * API calls for portfolio risk analysis
  */
 
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:8000/api';
-
-// Create axios instance with auth token
-const api = axios.create({
-  baseURL: API_BASE_URL,
-});
-
-// Add token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+import api from './api';
 
 const portfolioAnalysisService = {
   /**
@@ -29,22 +13,19 @@ const portfolioAnalysisService = {
    * @returns {Promise} Analysis results
    */
   analyzePortfolio: async (portfolioData, riskFreeRate = null) => {
-    const token = localStorage.getItem('token');
-    const response = await api.post('/portfolio-analysis/analyze', {
+    const response = await api.post('/api/portfolio-analysis/analyze', {
       portfolio_data: portfolioData,
       risk_free_rate: riskFreeRate,
-    }, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     return response.data;
   },
 
   /**
-   * Get latest portfolio analysis
+   * Get latest portfolio analysis (includes cached ai_explanation if present)
    * @returns {Promise} Latest analysis
    */
   getLatestAnalysis: async () => {
-    const response = await api.get('/portfolio-analysis/latest');
+    const response = await api.get('/api/portfolio-analysis/latest');
     return response.data;
   },
 
@@ -54,7 +35,7 @@ const portfolioAnalysisService = {
    * @returns {Promise} Analysis history
    */
   getAnalysisHistory: async (limit = 10) => {
-    const response = await api.get('/portfolio-analysis/history', {
+    const response = await api.get('/api/portfolio-analysis/history', {
       params: { limit },
     });
     return response.data;
@@ -73,7 +54,7 @@ const portfolioAnalysisService = {
       drift = 0.10,
     } = params;
 
-    const response = await api.post('/portfolio-analysis/generate-sample-data', {
+    const response = await api.post('/api/portfolio-analysis/generate-sample-data', {
       initial_value,
       days,
       volatility,
@@ -88,15 +69,19 @@ const portfolioAnalysisService = {
    * @returns {Promise}
    */
   deleteAnalysis: async (analysisId) => {
-    await api.delete(`/portfolio-analysis/${analysisId}`);
+    await api.delete(`/api/portfolio-analysis/${analysisId}`);
   },
 
   /**
-   * Get AI explanation for portfolio analysis
+   * Get AI-powered explanation for latest portfolio analysis.
+   * Returns cached explanation instantly if already generated,
+   * otherwise calls Ollama LLM (may take up to 90s).
    * @returns {Promise} AI explanation with metrics
    */
   explainAnalysis: async () => {
-    const response = await api.get('/portfolio-analysis/explain');
+    const response = await api.get('/api/portfolio-analysis/explain', {
+      timeout: 120000, // 120s — LLM inference can take up to 90s
+    });
     return response.data;
   },
 };

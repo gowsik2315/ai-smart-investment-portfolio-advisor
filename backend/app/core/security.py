@@ -1,31 +1,40 @@
 """
 Security Utilities
-JWT token creation and verification
-Note: Password encryption temporarily disabled for development
+JWT token creation and verification, bcrypt password hashing
 """
 
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
+import bcrypt
 
 from app.core.config import settings
 
 
-def verify_password(plain_password: str, stored_password: str) -> bool:
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verify a plain password against stored password
-    Note: Encryption temporarily disabled - using plain text comparison
+    Verify a plain-text password against a bcrypt hash.
+    Handles legacy plain-text passwords stored before hashing was enabled.
     """
-    return plain_password == stored_password
+    # Attempt bcrypt verification first
+    try:
+        password_bytes = plain_password.encode("utf-8")
+        hash_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(password_bytes, hash_bytes)
+    except Exception:
+        # Fallback: plain-text comparison for accounts created before
+        # hashing was enabled (migrating old dev accounts)
+        return plain_password == hashed_password
 
 
 def get_password_hash(password: str) -> str:
     """
-    Store password (no hashing for now)
-    Note: Encryption temporarily disabled - storing plain text
-    WARNING: This is NOT secure for production!
+    Hash a plain-text password with bcrypt.
     """
-    return password
+    password_bytes = password.encode("utf-8")
+    salt = bcrypt.gensalt(rounds=12)
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode("utf-8")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

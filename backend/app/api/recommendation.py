@@ -229,7 +229,8 @@ async def explain_recommendation(
     result = await ollama_service.generate_explanation(
         prompt=prompt,
         system_prompt=OllamaPrompts.SYSTEM_FINANCIAL_ADVISOR,
-        temperature=0.7
+        temperature=0.7,
+        max_tokens=400
     )
     
     # Cache the AI explanation in database

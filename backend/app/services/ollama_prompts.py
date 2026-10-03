@@ -18,16 +18,7 @@ class OllamaPrompts:
     """
     
     # System prompts for different contexts
-    SYSTEM_FINANCIAL_ADVISOR = """You are a helpful financial AI assistant. Your role is to explain investment concepts, risk assessments, and portfolio recommendations in simple, understandable language.
-
-Guidelines:
-- Be clear, concise, and educational
-- Use examples when helpful
-- Avoid jargon; explain technical terms
-- Always add disclaimer that this is automated advice
-- Never make guarantees about returns
-- Encourage consulting with certified financial advisors for personalized advice
-- Focus on explaining the 'why' behind the calculations"""
+    SYSTEM_FINANCIAL_ADVISOR = """You are a concise financial AI assistant. Explain investment concepts clearly in simple language. Always note this is automated guidance — consult a certified advisor for personalized advice."""
 
     @staticmethod
     def risk_classification_explanation(
@@ -85,28 +76,11 @@ Keep the explanation under 200 words, use simple language, and be encouraging.""
         
         monthly_example = ""
         if monthly_savings:
-            monthly_example = f"""
-Monthly Investment Example (₹{monthly_savings:,.0f}):
-- Stocks: ₹{monthly_savings * stocks_percent / 100:,.0f}
-- Mutual Funds: ₹{monthly_savings * mutual_funds_percent / 100:,.0f}
-- Gold: ₹{monthly_savings * gold_percent / 100:,.0f}
-- Emergency Fund: ₹{monthly_savings * emergency_percent / 100:,.0f}"""
+            monthly_example = f" (₹{monthly_savings * stocks_percent / 100:,.0f} stocks, ₹{monthly_savings * mutual_funds_percent / 100:,.0f} MF, ₹{monthly_savings * gold_percent / 100:,.0f} gold from ₹{monthly_savings:,.0f}/month)"
 
-        return f"""A portfolio allocation has been recommended for a **{investor_type}** investor (Risk Score: {risk_score:.1f}):
+        return f"""{investor_type} investor (Risk Score {risk_score:.1f}): Stocks {stocks_percent:.0f}%, Mutual Funds {mutual_funds_percent:.0f}%, Gold {gold_percent:.0f}%, Emergency {emergency_percent:.0f}%.{monthly_example}
 
-Allocation:
-- Stocks: {stocks_percent:.0f}%
-- Mutual Funds: {mutual_funds_percent:.0f}%
-- Gold: {gold_percent:.0f}%
-- Emergency Fund: {emergency_percent:.0f}%{monthly_example}
-
-Please explain:
-1. Why this allocation is suitable for this investor type
-2. The purpose of each asset class in the portfolio
-3. Expected risk-return profile
-4. 2 specific investment products recommended for each category (Indian market)
-
-Keep under 250 words. Be practical and actionable."""
+In 3 short points: (1) why this allocation suits this investor type, (2) role of each asset class, (3) one specific Indian investment product per category. Be concise."""
 
     @staticmethod
     def sip_explanation(

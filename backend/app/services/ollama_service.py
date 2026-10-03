@@ -3,9 +3,9 @@ Ollama AI Service
 Integrates with local Ollama instance for AI-powered explanations
 """
 
+import asyncio
 import httpx
 import json
-import time
 from typing import Dict, Optional
 from app.core.config import settings
 
@@ -75,9 +75,9 @@ class OllamaService:
                         'error': str(e)
                     }
                 
-                # Wait before retry with exponential backoff
+                # Wait before retry with exponential backoff (non-blocking)
                 wait_time = self.retry_delay * (2 ** attempt)
-                time.sleep(wait_time)
+                await asyncio.sleep(wait_time)
         
         return {
             'success': False,
