@@ -32,7 +32,20 @@ datasets/dataset_report.txt
 *.joblib
 *.h5
 *.model
-models/
+
+# Model artifacts are local-only, but the contract doc is tracked.
+#
+# This pattern MUST stay anchored as `models/*`, not `models/`. A pattern
+# with no leading or middle slash matches at EVERY directory depth, so a
+# bare `models/` also excluded `backend/app/models/` — the entire
+# SQLAlchemy ORM layer was silently untracked, and a fresh clone could
+# not start the application. `models/*` contains a middle separator and
+# is therefore anchored to this directory only.
+#
+# The negation must also be `models/*` rather than `models/`: git cannot
+# re-include a file that sits inside an excluded directory.
+models/*
+!models/README.md
 
 # Testing
 .pytest_cache/

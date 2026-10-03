@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.core.security import get_password_hash, verify_password, create_access_token, create_refresh_token
 from app.models.user import User
 from app.schemas.user import UserCreate, UserLogin, UserResponse, Token
@@ -18,11 +19,12 @@ router = APIRouter()
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """
-    Register a new user
-    
-    NOTE: Password encryption temporarily disabled for development.
-    Passwords are stored in plain text. DO NOT use in production!
-    
+    Register a new user.
+
+    Passwords are hashed with bcrypt (cost factor 12) before storage.
+    The previous note here claimed they were stored in plain text; that
+    was stale — `get_password_hash` has been doing real bcrypt hashing.
+
     - **email**: Valid email address
     - **password**: Minimum 8 characters
     - **full_name**: User's full name
@@ -36,7 +38,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
             detail="Email already registered"
         )
     
-    # Create new user (password stored as plain text for now)
+    # Hash the password with bcrypt before storing
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
         email=user_data.email,
@@ -55,10 +57,13 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 async def login(login_data: UserLogin, db: Session = Depends(get_db)):
     """
-    Login user and return access tokens
-    
-    NOTE: Using plain text password comparison for development.
-    
+    Login user and return access tokens.
+
+    Verifies against the stored bcrypt hash. `verify_password` also
+    accepts a plain-text match as a fallback, to keep dev accounts
+    created before hashing was enabled usable — remove that fallback
+    before production.
+
     - **email**: User email
     - **password**: User password
     """
@@ -70,7 +75,7 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
             detail="Incorrect email or password"
         )
     
-    # Verify password (plain text comparison for now)
+    # Verify against the stored bcrypt hash
     if not verify_password(login_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -101,14 +106,22 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(db: Session = Depends(get_db)):
+async def read_current_user(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
+):
     """
-    Get current authenticated user information
-    
-    Note: This endpoint is a placeholder. JWT authentication middleware will be implemented in Phase 2.
+    Get the authenticated user's own record.
+
+    Previously a 501 placeholder. The JWT dependency it was waiting on
+    already existed — it is now shared from `app.core.dependencies` — so
+    this resolves the user from the bearer token directly.
     """
-    # Placeholder: In production, this will extract user from JWT token
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Authentication middleware will be implemented in Phase 2"
-    )
+    user = db.query(User).filter(User.id == current_user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return user

@@ -1,38 +1,69 @@
-# FastAPI Framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+# ============================================================
+#  Smart Investment Portfolio Advisor — Backend Dependencies
+#
+#  Python 3.13.7
+#
+#  Pins below are the versions actually installed and verified
+#  in the project venv. Previous pins had drifted by a full major
+#  version in places (pandas 2.x -> 3.x, numpy 1.x -> 2.x), which
+#  meant `pip install -r requirements.txt` produced a different
+#  environment than the one the code runs in.
+#
+#  Install:  pip install -r requirements.txt
+# ============================================================
 
-# Database
-sqlalchemy==2.0.25
-alembic==1.13.1
+# ── Web Framework ────────────────────────────────────────────
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+python-multipart==0.0.32
 
-# Authentication & Security
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-dateutil==2.8.2
+# ── Database ─────────────────────────────────────────────────
+SQLAlchemy==2.0.52
+alembic==1.19.1
 
-# Environment & Configuration
-python-dotenv==1.0.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
+# ── Authentication & Security ────────────────────────────────
+# NOTE: passlib was removed. It was declared but never imported;
+# app/core/security.py calls bcrypt directly, and passlib 1.7.4 is
+# incompatible with bcrypt 5.x anyway.
+python-jose[cryptography]==3.5.0
+bcrypt==5.0.0
+cryptography==50.0.0
+python-dateutil==2.9.0.post0
 
-# Data Processing
-pandas==2.2.0
-numpy==1.26.3
+# ── Configuration ────────────────────────────────────────────
+python-dotenv==1.2.2
+pydantic==2.13.4
+pydantic-settings==2.15.0
 
-# Machine Learning (for future use)
-scikit-learn==1.4.0
+# ── Data Processing ──────────────────────────────────────────
+pandas==3.0.5
+numpy==2.5.2
+scipy==1.18.0
 
-# Financial Data
-yfinance==1.5.1
+# ── Machine Learning ─────────────────────────────────────────
+# Volatility forecasting: model training happens offline (notebook
+# or script); the API loads the saved artifact via joblib at runtime.
+scikit-learn==1.9.0
+joblib==1.5.3
 
-# HTTP Client
-httpx==0.26.0
+# Baselines the ML model must beat to be worth shipping:
+#   arch        -> GARCH(1,1)
+#   statsmodels -> HAR / OLS diagnostics, used by arch
+arch==8.0.0
+statsmodels==0.15.0
 
-# CORS (handled by FastAPI built-in middleware)
-# python-cors==1.0.0
+# Parquet engine for the on-disk price cache
+pyarrow==25.0.1
 
-# Development
-pytest==7.4.4
-pytest-asyncio==0.23.3
+# ── Financial Data ───────────────────────────────────────────
+yfinance==1.5.2
+
+# ── HTTP Client (Ollama calls) ───────────────────────────────
+httpx==0.28.1
+
+# ── Plotting (offline model evaluation only, not used by API) ─
+matplotlib==3.11.2
+
+# ── Testing ──────────────────────────────────────────────────
+pytest==9.1.1
+pytest-asyncio==1.4.0

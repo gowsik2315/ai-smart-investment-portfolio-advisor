@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.models.portfolio_analysis import PortfolioAnalysis
 from app.schemas.portfolio_analysis import (
     PortfolioAnalysisRequest,
@@ -23,16 +24,14 @@ from app.services.ollama_prompts import OllamaPrompts
 
 router = APIRouter()
 
-# Hardcode user_id for testing (remove auth requirement)
-TEST_USER_ID = 1
-
 
 @router.post("/analyze", response_model=PortfolioAnalysisResponse, status_code=status.HTTP_200_OK)
 async def analyze_portfolio(
     request: PortfolioAnalysisRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
 ):
-    """Analyze portfolio risk metrics - NO AUTH REQUIRED FOR TESTING"""
+    """Analyze portfolio risk metrics for the authenticated user."""
     try:
         portfolio_data = [point.model_dump() for point in request.portfolio_data]
         analysis_result = PortfolioRiskAnalyzer.calculate_portfolio_risk(
@@ -43,7 +42,7 @@ async def analyze_portfolio(
         
         # Save to database with test user
         db_analysis = PortfolioAnalysis(
-            user_id=TEST_USER_ID,
+            user_id=current_user_id,
             volatility=analysis_result['volatility'],
             volatility_percent=analysis_result['volatility_percent'],
             sharpe_ratio=analysis_result['sharpe_ratio'],
@@ -72,10 +71,13 @@ async def analyze_portfolio(
 
 
 @router.get("/latest", response_model=PortfolioAnalysisResponse)
-async def get_latest_analysis(db: Session = Depends(get_db)):
-    """Get latest portfolio analysis - NO AUTH REQUIRED"""
+async def get_latest_analysis(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
+):
+    """Get the authenticated user's latest portfolio analysis."""
     analysis = db.query(PortfolioAnalysis).filter(
-        PortfolioAnalysis.user_id == TEST_USER_ID
+        PortfolioAnalysis.user_id == current_user_id
     ).order_by(PortfolioAnalysis.created_at.desc()).first()
     
     if not analysis:
@@ -114,15 +116,18 @@ async def generate_sample_data(request: GenerateSampleDataRequest):
 
 
 @router.get("/explain")
-async def explain_portfolio_analysis(db: Session = Depends(get_db)):
+async def explain_portfolio_analysis(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
+):
     """
     Get AI-powered explanation of portfolio risk analysis (cached)
-    
+
     Returns cached AI explanation if available, otherwise generates new one.
     """
     # Get latest analysis
     analysis = db.query(PortfolioAnalysis).filter(
-        PortfolioAnalysis.user_id == TEST_USER_ID
+        PortfolioAnalysis.user_id == current_user_id
     ).order_by(PortfolioAnalysis.created_at.desc()).first()
     
     if not analysis:

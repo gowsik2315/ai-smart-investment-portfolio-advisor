@@ -1,25 +1,16 @@
 /**
  * Diversification Analysis Service
  * API calls for portfolio diversification analysis
+ *
+ * Uses the shared `api` instance rather than its own axios client.
+ * The previous local client read `localStorage.getItem('token')`, but
+ * authService stores the JWT under `access_token`, so it attached no
+ * Authorization header at all. That went unnoticed only because these
+ * endpoints were hardcoded to user 1; now that they require
+ * authentication, every call would have returned 401.
  */
 
-import axios from 'axios';
-
-const API_BASE_URL = 'http://localhost:8000/api';
-
-// Create axios instance
-const api = axios.create({
-  baseURL: API_BASE_URL,
-});
-
-// Add token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+import api from './api';
 
 const diversificationService = {
   /**
@@ -28,7 +19,7 @@ const diversificationService = {
    * @returns {Promise} Analysis results
    */
   analyzeDiversification: async (holdings) => {
-    const response = await api.post('/diversification-analysis/analyze', {
+    const response = await api.post('/api/diversification-analysis/analyze', {
       holdings,
     });
     return response.data;
@@ -39,7 +30,7 @@ const diversificationService = {
    * @returns {Promise} Latest analysis
    */
   getLatestAnalysis: async () => {
-    const response = await api.get('/diversification-analysis/latest');
+    const response = await api.get('/api/diversification-analysis/latest');
     return response.data;
   },
 
@@ -49,7 +40,7 @@ const diversificationService = {
    * @returns {Promise} Analysis history
    */
   getAnalysisHistory: async (limit = 10) => {
-    const response = await api.get('/diversification-analysis/history', {
+    const response = await api.get('/api/diversification-analysis/history', {
       params: { limit },
     });
     return response.data;
@@ -66,7 +57,7 @@ const diversificationService = {
       diversified = true,
     } = params;
 
-    const response = await api.post('/diversification-analysis/generate-sample-holdings', {
+    const response = await api.post('/api/diversification-analysis/generate-sample-holdings', {
       portfolio_value,
       diversified,
     });
@@ -79,7 +70,7 @@ const diversificationService = {
    * @returns {Promise}
    */
   deleteAnalysis: async (analysisId) => {
-    await api.delete(`/diversification-analysis/${analysisId}`);
+    await api.delete(`/api/diversification-analysis/${analysisId}`);
   },
 
   /**
@@ -87,7 +78,10 @@ const diversificationService = {
    * @returns {Promise} AI explanation with metrics
    */
   explainAnalysis: async () => {
-    const response = await api.get('/diversification-analysis/explain');
+    const response = await api.get('/api/diversification-analysis/explain', {
+      timeout: 240000, // Ollama on CPU can need ~100s per explanation;
+                       // backend retries once, so allow headroom
+    });
     return response.data;
   },
 };

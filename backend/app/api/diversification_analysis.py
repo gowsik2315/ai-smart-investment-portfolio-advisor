@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.models.diversification_analysis import DiversificationAnalysis
 from app.schemas.diversification_analysis import (
     DiversificationAnalysisRequest,
@@ -24,16 +25,14 @@ from app.services.ollama_prompts import OllamaPrompts
 
 router = APIRouter()
 
-# Hardcode user_id for testing (remove auth requirement)
-TEST_USER_ID = 1
-
 
 @router.post("/analyze", response_model=DiversificationAnalysisResponse, status_code=status.HTTP_200_OK)
 async def analyze_diversification(
     request: DiversificationAnalysisRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
 ):
-    """Analyze portfolio diversification - NO AUTH REQUIRED FOR TESTING"""
+    """Analyze portfolio diversification for the authenticated user."""
     try:
         # Convert holdings to dict format
         holdings = [holding.model_dump() for holding in request.holdings]
@@ -43,7 +42,7 @@ async def analyze_diversification(
         
         # Save to database with test user
         db_analysis = DiversificationAnalysis(
-            user_id=TEST_USER_ID,
+            user_id=current_user_id,
             diversification_score=analysis_result['diversification_score'],
             hhi_score=analysis_result['hhi_score'],
             num_holdings=analysis_result['num_holdings'],
@@ -78,10 +77,13 @@ async def analyze_diversification(
 
 
 @router.get("/latest", response_model=DiversificationAnalysisResponse)
-async def get_latest_analysis(db: Session = Depends(get_db)):
-    """Get latest diversification analysis - NO AUTH REQUIRED"""
+async def get_latest_analysis(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
+):
+    """Get the authenticated user's latest diversification analysis."""
     analysis = db.query(DiversificationAnalysis).filter(
-        DiversificationAnalysis.user_id == TEST_USER_ID
+        DiversificationAnalysis.user_id == current_user_id
     ).order_by(DiversificationAnalysis.created_at.desc()).first()
     
     if not analysis:
@@ -102,11 +104,12 @@ async def get_latest_analysis(db: Session = Depends(get_db)):
 @router.get("/history", response_model=List[DiversificationAnalysisDB])
 async def get_analysis_history(
     limit: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
 ):
-    """Get diversification analysis history - NO AUTH REQUIRED"""
+    """Get the authenticated user's diversification analysis history."""
     analyses = db.query(DiversificationAnalysis).filter(
-        DiversificationAnalysis.user_id == TEST_USER_ID
+        DiversificationAnalysis.user_id == current_user_id
     ).order_by(DiversificationAnalysis.created_at.desc()).limit(limit).all()
     
     return analyses
@@ -125,12 +128,13 @@ async def generate_sample_holdings(request: GenerateSampleHoldingsRequest):
 @router.delete("/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_analysis(
     analysis_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
 ):
-    """Delete a diversification analysis - NO AUTH REQUIRED"""
+    """Delete one of the authenticated user's diversification analyses."""
     analysis = db.query(DiversificationAnalysis).filter(
         DiversificationAnalysis.id == analysis_id,
-        DiversificationAnalysis.user_id == TEST_USER_ID
+        DiversificationAnalysis.user_id == current_user_id
     ).first()
     
     if not analysis:
@@ -143,15 +147,18 @@ async def delete_analysis(
 
 
 @router.get("/explain")
-async def explain_diversification_analysis(db: Session = Depends(get_db)):
+async def explain_diversification_analysis(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
+):
     """
     Get AI-powered explanation of diversification analysis (cached)
-    
+
     Returns cached AI explanation if available, otherwise generates new one.
     """
     # Get latest analysis
     analysis = db.query(DiversificationAnalysis).filter(
-        DiversificationAnalysis.user_id == TEST_USER_ID
+        DiversificationAnalysis.user_id == current_user_id
     ).order_by(DiversificationAnalysis.created_at.desc()).first()
     
     if not analysis:

@@ -93,12 +93,24 @@ backend/investment_advisor.db
 # ──────────────────────────────────────────────
 backend/datasets/investor_risk_dataset.csv
 backend/datasets/dataset_report.txt
+# Volatility training panel — regenerate with:
+#   python -m ml.prepare_volatility_dataset
+backend/datasets/volatility_*.parquet
+backend/datasets/volatility_report.txt
 
 # Trained ML models
+# Artifacts stay local; the repo tracks the training code and the
+# contract in backend/app/ml/README.md, not the binaries.
 *.pkl
 *.joblib
 *.h5
 *.model
+
+# Cached price history (regenerated on demand from Yahoo Finance)
+backend/data_cache/
+
+# Database backups taken before migrations
+*.db.backup-*
 
 # ──────────────────────────────────────────────
 # Logs

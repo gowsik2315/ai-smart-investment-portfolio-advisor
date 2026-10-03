@@ -13,6 +13,14 @@ import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import Loading from '../components/common/Loading';
 import monteCarloService from '../services/monteCarloService';
+import mlService from '../services/mlService';
+
+// Tickers offered for the ML-forecast volatility source. Matches the
+// training universe in backend/app/ml/config.py.
+const FORECAST_TICKERS = [
+  'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'ICICIBANK.NS',
+  'HINDUNILVR.NS', 'ITC.NS', 'LT.NS', 'MARUTI.NS', 'SUNPHARMA.NS',
+];
 
 const MonteCarloSimulation = () => {
   const [simulation, setSimulation] = useState(null);
@@ -20,12 +28,17 @@ const MonteCarloSimulation = () => {
   const [simulating, setSimulating] = useState(false);
   const [error, setError] = useState(null);
   const [simulationHistory, setSimulationHistory] = useState([]);
-  
+
   // AI explanation state
   const [aiExplanation, setAiExplanation] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
-  
+
+  // ML volatility forecasting state
+  const [volSource, setVolSource] = useState('manual'); // 'manual' | 'predicted'
+  const [ticker, setTicker] = useState('RELIANCE.NS');
+  const [modelInfo, setModelInfo] = useState(null);
+
   const [params, setParams] = useState({
     initial_investment: 100000,
     expected_return: 0.12,
@@ -33,6 +46,7 @@ const MonteCarloSimulation = () => {
     years: 10,
     num_simulations: 10000,
     monthly_contribution: 0,
+    random_seed: '',
     simulation_name: '',
     notes: ''
   });
@@ -40,7 +54,17 @@ const MonteCarloSimulation = () => {
   useEffect(() => {
     fetchLatestSimulation();
     fetchSimulationHistory();
+    fetchModelInfo();
   }, []);
+
+  const fetchModelInfo = async () => {
+    try {
+      setModelInfo(await mlService.getModelInfo());
+    } catch (err) {
+      // Not fatal: the page works without the forecasting model
+      setModelInfo({ model_loaded: false });
+    }
+  };
 
   const fetchLatestSimulation = async () => {
     setLoading(true);
@@ -67,13 +91,16 @@ const MonteCarloSimulation = () => {
     }
   };
 
-  const fetchAIExplanation = async () => {
+  const fetchAIExplanation = async (simulationId) => {
     setAiLoading(true);
     setAiError('');
     setAiExplanation('');
 
     try {
-      const data = await monteCarloService.explainSimulation();
+      // Pass the id so the explanation describes THIS run. Without it the
+      // backend falls back to the latest saved run, which is a different
+      // simulation if this one was not saved.
+      const data = await monteCarloService.explainSimulation(simulationId);
       if (data.ai_available && data.ai_explanation) {
         setAiExplanation(data.ai_explanation);
       } else {
@@ -100,14 +127,31 @@ const MonteCarloSimulation = () => {
     setSimulating(true);
     setError(null);
     try {
-      const result = await monteCarloService.runSimulation(params, true);
+      const usePredicted = volSource === 'predicted';
+
+      const payload = {
+        ...params,
+        // Empty string from the optional seed input must not be sent as ''
+        random_seed: params.random_seed === '' ? null : parseInt(params.random_seed, 10),
+        use_predicted_volatility: usePredicted,
+        ...(usePredicted ? { ticker } : {}),
+      };
+
+      const result = await monteCarloService.runSimulation(payload, true);
       setSimulation(result);
       fetchSimulationHistory(); // Refresh history
-      
-      // Automatically fetch AI explanation after simulation
-      fetchAIExplanation();
+
+      // Explain this specific run, not merely the latest one
+      fetchAIExplanation(result.simulation_id);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to run simulation');
+      const detail = err.response?.data?.detail;
+      setError(
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d) => d.msg).join('; ')
+            : 'Failed to run simulation'
+      );
     } finally {
       setSimulating(false);
     }
@@ -198,6 +242,63 @@ const MonteCarloSimulation = () => {
       {/* Simulation Parameters */}
       <Card title="Simulation Parameters" className="mb-6">
         <div className="space-y-4">
+
+          {/* Volatility source: manual entry vs ML forecast */}
+          <div className="p-4 bg-secondary-50 border border-secondary-200 rounded-lg">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+              <span className="text-sm font-medium text-secondary-700">
+                Volatility Source
+              </span>
+              {modelInfo && (
+                <span
+                  className={`text-xs px-2 py-1 rounded-full ${
+                    modelInfo.model_loaded
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {modelInfo.model_loaded
+                    ? `Model loaded: ${modelInfo.model?.model_version ?? 'unversioned'}`
+                    : 'No model trained yet — forecasts fall back to historical volatility'}
+                </span>
+              )}
+            </div>
+
+            <div className="flex gap-4 flex-wrap">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="volSource"
+                  checked={volSource === 'manual'}
+                  onChange={() => setVolSource('manual')}
+                />
+                <span className="text-sm">Enter manually</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="volSource"
+                  checked={volSource === 'predicted'}
+                  onChange={() => setVolSource('predicted')}
+                />
+                <span className="text-sm">ML-based volatility forecast</span>
+              </label>
+
+              {volSource === 'predicted' && (
+                <select
+                  value={ticker}
+                  onChange={(e) => setTicker(e.target.value)}
+                  className="px-3 py-1 border border-secondary-300 rounded-lg text-sm"
+                >
+                  {FORECAST_TICKERS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-secondary-700 mb-1">
@@ -233,10 +334,16 @@ const MonteCarloSimulation = () => {
                 step="0.01"
                 value={(params.volatility * 100).toFixed(1)}
                 onChange={(e) => setParams({...params, volatility: parseFloat(e.target.value) / 100})}
-                className="w-full px-3 py-2 border border-secondary-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                disabled={volSource === 'predicted'}
+                className="w-full px-3 py-2 border border-secondary-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-secondary-100 disabled:text-secondary-400"
               />
+              {volSource === 'predicted' && (
+                <p className="text-xs text-secondary-500 mt-1">
+                  Supplied by the forecasting model
+                </p>
+              )}
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-secondary-700 mb-1">
                 Investment Duration (Years)
@@ -306,6 +413,23 @@ const MonteCarloSimulation = () => {
               />
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-secondary-700 mb-1">
+              Random Seed (Optional)
+            </label>
+            <input
+              type="number"
+              value={params.random_seed}
+              onChange={(e) => setParams({...params, random_seed: e.target.value})}
+              placeholder="e.g. 42 — leave blank for a fresh random draw"
+              className="w-full px-3 py-2 border border-secondary-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-xs text-secondary-500 mt-1">
+              Fix the seed to compare a forecast volatility against a manual one
+              — the difference then reflects the parameter, not the random draw.
+            </p>
+          </div>
           
           <Button
             onClick={handleRunSimulation}
@@ -320,6 +444,49 @@ const MonteCarloSimulation = () => {
       {/* Results */}
       {simulation && (
         <>
+          {/* Where this run's volatility came from */}
+          {simulation.volatility_provenance && (
+            <div
+              className={`mb-6 p-4 rounded-lg border ${
+                simulation.volatility_provenance.source === 'ml_predicted'
+                  ? 'bg-green-50 border-green-200'
+                  : simulation.volatility_provenance.source === 'historical_fallback'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-secondary-50 border-secondary-200'
+              }`}
+            >
+              <div className="flex items-start justify-between flex-wrap gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-secondary-800">
+                    {simulation.volatility_provenance.source === 'ml_predicted'
+                      && 'Volatility: ML-based forecast'}
+                    {simulation.volatility_provenance.source === 'historical_fallback'
+                      && 'Volatility: trailing realised (historical), not a forecast'}
+                    {simulation.volatility_provenance.source === 'manual'
+                      && 'Volatility: entered manually'}
+                  </div>
+                  <div className="text-sm text-secondary-600 mt-1">
+                    Used {formatPercent(simulation.volatility_provenance.volatility_used)}
+                    {simulation.volatility_provenance.ticker
+                      && ` for ${simulation.volatility_provenance.ticker}`}
+                    {simulation.volatility_provenance.model_version
+                      && ` · model ${simulation.volatility_provenance.model_version}`}
+                  </div>
+                  {simulation.volatility_provenance.fallback_reason && (
+                    <div className="text-xs text-amber-800 mt-1">
+                      {simulation.volatility_provenance.fallback_reason}
+                    </div>
+                  )}
+                </div>
+                {simulation.random_seed != null && (
+                  <span className="text-xs text-secondary-500">
+                    seed {simulation.random_seed}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Scenarios Overview */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <Card>
@@ -365,15 +532,57 @@ const MonteCarloSimulation = () => {
             </Card>
           </div>
 
+          {/* Downside risk — VaR and CVaR.
+              These were computed by the simulator but never reached the
+              response before, so the UI had no tail-risk figures at all. */}
+          {simulation.risk_metrics && (
+            <Card title="Downside Risk" className="mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <div className="text-sm font-medium text-secondary-600 mb-1">
+                    Value at Risk (5%)
+                  </div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {formatCurrency(simulation.risk_metrics.var_5_percent)}
+                  </div>
+                  <div className="text-xs text-secondary-500 mt-1">
+                    95% of outcomes finish above this.
+                    {simulation.risk_metrics.var_loss_amount > 0
+                      ? ` Shortfall vs money invested: ${formatCurrency(simulation.risk_metrics.var_loss_amount)} (${simulation.risk_metrics.var_loss_percent.toFixed(1)}%).`
+                      : ' Still above total contributions.'}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm font-medium text-secondary-600 mb-1">
+                    Conditional VaR (worst 5%)
+                  </div>
+                  <div className="text-2xl font-bold text-red-700">
+                    {formatCurrency(simulation.risk_metrics.cvar_5_percent)}
+                  </div>
+                  <div className="text-xs text-secondary-500 mt-1">
+                    Average outcome if you land in the worst 5%.
+                    {simulation.risk_metrics.cvar_loss_amount > 0
+                      ? ` Shortfall: ${formatCurrency(simulation.risk_metrics.cvar_loss_amount)} (${simulation.risk_metrics.cvar_loss_percent.toFixed(1)}%).`
+                      : ' Still above total contributions.'}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {/* Statistics */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <Card>
-              <div className="text-sm font-medium text-secondary-600 mb-1">Mean Value</div>
+              <div className="text-sm font-medium text-secondary-600 mb-1">Median Value</div>
               <div className="text-2xl font-bold text-primary-600">
-                {formatCurrency(simulation.statistics.mean_value)}
+                {formatCurrency(simulation.scenarios.average_case)}
               </div>
               <div className="text-xs text-secondary-500 mt-1">
-                Average of all simulations
+                Typical outcome. Preferred over the mean: terminal values are
+                right-skewed, so the mean
+                ({formatCurrency(simulation.statistics.mean_value)}) is pulled
+                up by a few extreme paths.
               </div>
             </Card>
 

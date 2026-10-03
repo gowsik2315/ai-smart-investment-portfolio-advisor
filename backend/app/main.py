@@ -3,13 +3,31 @@ FastAPI Application Entry Point
 Main application configuration and routing
 """
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api import auth, users, profile, risk, portfolio, sip, market, recommendation, portfolio_analysis, diversification_analysis, monte_carlo, ollama_health
+from app.api import (
+    auth,
+    users,
+    profile,
+    risk,
+    sip,
+    market,
+    recommendation,
+    portfolio_analysis,
+    diversification_analysis,
+    monte_carlo,
+    ml,
+    ollama_health,
+)
+
+
+logger = logging.getLogger("app.startup")
 
 
 # Lifespan event handler for startup and shutdown
@@ -19,17 +37,23 @@ async def lifespan(app: FastAPI):
     Lifespan event handler
     - Startup: Create database tables
     - Shutdown: Clean up resources
+
+    Startup messages go through `logging` and contain only ASCII. The
+    previous emoji `print()` calls raised UnicodeEncodeError and aborted
+    startup on Windows whenever stdout was not UTF-8 — which is the case
+    any time output is redirected to a file or the app runs as a service
+    rather than in an interactive terminal.
     """
     # Startup
-    print("🚀 Starting application...")
-    print("📊 Creating database tables...")
+    logger.info("Starting application...")
+    logger.info("Creating database tables...")
     Base.metadata.create_all(bind=engine, checkfirst=True)
-    print("✅ Database tables created successfully!")
-    
+    logger.info("Database tables ready.")
+
     yield
-    
+
     # Shutdown
-    print("👋 Shutting down application...")
+    logger.info("Shutting down application...")
 
 
 # Create FastAPI application instance
@@ -81,13 +105,18 @@ app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=
 app.include_router(profile.router, prefix=f"{settings.API_V1_PREFIX}/profile", tags=["Profile"])
 app.include_router(risk.router, prefix=f"{settings.API_V1_PREFIX}/risk", tags=["Risk Assessment"])
 app.include_router(recommendation.router, prefix=f"{settings.API_V1_PREFIX}/recommendation", tags=["Portfolio Recommendation"])
-app.include_router(portfolio.router, prefix=f"{settings.API_V1_PREFIX}/portfolio", tags=["Portfolio"])
 app.include_router(portfolio_analysis.router, prefix=f"{settings.API_V1_PREFIX}/portfolio-analysis", tags=["Portfolio Analysis"])
 app.include_router(diversification_analysis.router, prefix=f"{settings.API_V1_PREFIX}/diversification-analysis", tags=["Diversification Analysis"])
 app.include_router(monte_carlo.router, prefix=f"{settings.API_V1_PREFIX}/monte-carlo", tags=["Monte Carlo Simulation"])
 app.include_router(sip.router, prefix=f"{settings.API_V1_PREFIX}/sip", tags=["SIP Plans"])
 app.include_router(market.router, prefix=f"{settings.API_V1_PREFIX}/market", tags=["Market Data"])
-app.include_router(ollama_health.router, prefix=f"{settings.API_V1_PREFIX}/ollama", tags=["AI Service"])
+
+# ML-based volatility forecasting. Kept on its own tag, distinct from the
+# Ollama-backed "AI Service" below: one is a trained model producing a
+# number, the other is an LLM producing prose.
+app.include_router(ml.router, prefix=f"{settings.API_V1_PREFIX}/ml", tags=["ML Volatility Forecasting"])
+
+app.include_router(ollama_health.router, prefix=f"{settings.API_V1_PREFIX}/ollama", tags=["AI Explanations"])
 
 
 if __name__ == "__main__":

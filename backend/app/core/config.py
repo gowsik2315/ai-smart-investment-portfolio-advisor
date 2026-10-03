@@ -31,9 +31,14 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:3001"
     
     # Ollama AI Configuration
+    #
+    # Defaults match .env.example. qwen2.5:3b generates roughly 10
+    # tokens/sec on CPU, so a 1000-token explanation takes ~100s; a
+    # timeout below that makes every first attempt fail and succeed only
+    # on retry, tripling the latency the user sees.
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "qwen2.5:7b"
-    OLLAMA_TIMEOUT: int = 30
+    OLLAMA_MODEL: str = "qwen2.5:3b"
+    OLLAMA_TIMEOUT: int = 180
     OLLAMA_ENABLED: bool = True
     
     @property

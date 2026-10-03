@@ -9,6 +9,7 @@ from typing import Optional, List
 from datetime import date, timedelta
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.core.security import get_current_user_id
 from app.models.sip_plan import SIPPlan
 from app.models.user import User
@@ -27,34 +28,6 @@ from app.services.ollama_prompts import OllamaPrompts
 router = APIRouter()
 
 
-def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> int:
-    """
-    Dependency to get current user from JWT token
-    """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
-        )
-    
-    token = authorization.replace("Bearer ", "")
-    user_id = get_current_user_id(token)
-    
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials"
-        )
-    
-    # Verify user exists
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    return user_id
 
 
 @router.post("/calculate", response_model=SIPCalculationResponse)

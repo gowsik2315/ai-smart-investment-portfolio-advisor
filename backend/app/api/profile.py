@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.core.security import get_current_user_id
 from app.models.financial_profile import FinancialProfile
 from app.models.risk_profile import RiskProfile
@@ -19,44 +20,6 @@ from app.services.risk_calculator import RiskCalculator
 router = APIRouter()
 
 
-def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> int:
-    """
-    Dependency to get current user from JWT token
-    
-    Args:
-        authorization: Bearer token from header
-        db: Database session
-    
-    Returns:
-        User ID
-    
-    Raises:
-        HTTPException: If token is invalid or user not found
-    """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
-        )
-    
-    token = authorization.replace("Bearer ", "")
-    user_id = get_current_user_id(token)
-    
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials"
-        )
-    
-    # Verify user exists
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    return user_id
 
 
 @router.post("/", response_model=FinancialProfileResponse, status_code=status.HTTP_201_CREATED)
