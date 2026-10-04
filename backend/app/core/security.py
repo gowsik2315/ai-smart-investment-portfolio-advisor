@@ -27,11 +27,31 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return plain_password == hashed_password
 
 
+# bcrypt truncates/rejects beyond 72 bytes of input
+BCRYPT_MAX_PASSWORD_BYTES = 72
+
+
 def get_password_hash(password: str) -> str:
     """
-    Hash a plain-text password with bcrypt.
+    Hash a plain-text password with bcrypt (cost factor 12).
+
+    Raises:
+        ValueError: if the password exceeds bcrypt's 72-byte input limit.
+
+    `UserCreate` already validates this, so the check here is defensive —
+    it keeps any other call path (a future admin tool, a seed script)
+    from surfacing bcrypt's own error as an opaque 500. Deliberately not
+    truncating: two passwords sharing a 72-byte prefix would otherwise
+    hash identically.
     """
     password_bytes = password.encode("utf-8")
+
+    if len(password_bytes) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(
+            f"Password exceeds bcrypt's {BCRYPT_MAX_PASSWORD_BYTES}-byte limit "
+            f"({len(password_bytes)} bytes)"
+        )
+
     salt = bcrypt.gensalt(rounds=12)
     hashed = bcrypt.hashpw(password_bytes, salt)
     return hashed.decode("utf-8")

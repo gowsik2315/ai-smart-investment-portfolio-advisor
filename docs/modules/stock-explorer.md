@@ -676,4 +676,5 @@ Authorization: Bearer {token}
 
 **Last Updated:** July 12, 2026  
 **Version:** 1.0  
-**Status:** Production Ready ✅
+**Status:** Implemented and covered by the test suite. Not yet deployed;
+see the pre-deployment checklist in [../../README.md](../../README.md#-security-features).

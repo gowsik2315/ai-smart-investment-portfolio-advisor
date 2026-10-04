@@ -1,14 +1,61 @@
-# 🧪 Testing Guide
+# Testing Guide
 
-## ✅ Fixed: Registration Password Error
+Covers the automated suite and the manual walkthroughs for registration
+and login.
 
-The bcrypt password hashing error has been fixed!
+---
 
-**Issue:** Bcrypt has a 72-byte limit for passwords
-**Solution:** 
-- Added password truncation in hashing function
-- Updated schema to limit password to 72 characters
-- Added frontend validation
+## Automated tests
+
+```bash
+cd backend
+pytest                              # 118 tests
+pytest tests/test_security.py -v    # one module, verbose
+pytest -k volatility                # by keyword
+```
+
+No network access is required: price data is synthesised by the fixtures
+in `tests/conftest.py`, because `yfinance` is rate-limited and would make
+the suite flaky for reasons unrelated to the code.
+
+| Module | What it covers |
+|---|---|
+| `test_monte_carlo_simulator.py` | GBM maths, closed-form drift preservation, path positivity at extreme sigma, VaR/CVaR ordering, seed reproducibility, input validation |
+| `test_ml_features.py` | Feature construction, and the leakage guards: a feature row must not change when future data is removed, and the target must equal independently-computed forward volatility |
+| `test_ml_registry_and_service.py` | Artifact contract (a mismatched or reordered feature set must be refused), and the volatility fallback chain |
+| `test_ml_evaluation.py` | RMSE/MAE/QLIKE, including QLIKE's asymmetry, plus the naive and HAR baselines |
+| `test_security.py` | bcrypt hashing, the 72-byte input limit measured in bytes, JWT round-trips, forged-token rejection |
+
+### The tests worth understanding
+
+Two carry more weight than the rest:
+
+- **`test_feature_row_unchanged_when_future_is_removed`** — a volatility
+  model that peeks at the future scores beautifully offline and is
+  worthless live, and no metric reveals it. Only this test does.
+- **`test_embargo_counts_dates_not_rows_on_a_panel`** — a regression
+  test for a leak invisible on single-ticker data. With 10 tickers there
+  are 10 rows per date, so an embargo measured in rows collapsed to one
+  trading day instead of 21.
+
+### Note on bcrypt's password limit
+
+bcrypt accepts at most 72 **bytes**. The registration schema once allowed
+100 **characters**, so a long passphrase reached bcrypt, raised, and
+surfaced as an unhandled 500. Validation now measures UTF-8 bytes at both
+the schema and the hasher, so over-long passwords get a 422. Truncating
+instead would be worse — two passwords sharing a 72-byte prefix would
+hash identically.
+
+---
+
+## Manual testing
+
+Register an account at http://localhost:3000/register. Each analytics
+page has a **Generate Sample Data** button to populate it.
+
+Note that every data endpoint requires a JWT. If pages redirect you to
+login, the token (stored as `access_token`) is missing or expired.
 
 ---
 

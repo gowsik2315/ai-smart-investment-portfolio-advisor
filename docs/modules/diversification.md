@@ -44,7 +44,7 @@ The Diversification Analysis module analyzes portfolio concentration across sect
 - `GenerateSampleHoldingsRequest`: Sample data generation parameters
 
 #### API Routes (`backend/app/api/diversification_analysis.py`)
-**No authentication required (TEST_USER_ID = 1)**
+**Requires authentication.** All endpoints resolve the user from the `Authorization: Bearer <jwt>` header via `app.core.dependencies.get_current_user` and scope every query to that user.
 
 - **POST** `/api/diversification-analysis/analyze`
   - Analyzes portfolio diversification
@@ -244,7 +244,7 @@ curl http://localhost:8000/api/diversification-analysis/latest
 
 ## Known Limitations
 
-1. **No Authentication**: Currently uses TEST_USER_ID = 1 for all operations
+1. **Static Sector Mapping**: Sector classification is supplied by the caller, not looked up
 2. **Static Holdings**: No integration with actual portfolio holdings yet
 3. **Manual Input**: Users must input holdings manually or use sample data
 4. **No Historical Tracking**: Dashboard doesn't show diversification trends yet
@@ -264,5 +264,4 @@ curl http://localhost:8000/api/diversification-analysis/latest
 All core features have been implemented, tested, and integrated. The module is fully functional and ready for use.
 
 **Implementation Date**: 2026-07-12
-**Developer**: AI Assistant (Kiro)
-**Status**: Production Ready (with TEST_USER_ID workaround)
+**Status**: Functional. Authentication enforced; all data scoped per user.

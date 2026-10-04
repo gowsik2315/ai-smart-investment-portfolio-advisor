@@ -78,13 +78,29 @@ Fields:
 - `SimulationSummary`: Listing summary
 
 #### API Routes (`backend/app/api/monte_carlo.py`)
-**No authentication required (TEST_USER_ID = 1)**
+**Requires authentication.** All endpoints resolve the user from the `Authorization: Bearer <jwt>` header via `app.core.dependencies.get_current_user` and scope every query to that user.
 
 **Endpoints:**
 1. **POST** `/api/monte-carlo/simulate?save=true`
    - Runs Monte Carlo simulation
-   - Returns complete results
+   - Returns complete results, including `risk_metrics` (VaR/CVaR),
+     `volatility_provenance` and `simulation_id`
    - Optionally saves to database
+
+   Volatility-related request fields:
+
+   | Field | Meaning |
+   |---|---|
+   | `volatility` | Annual σ as a decimal. Required unless `use_predicted_volatility` is true. |
+   | `use_predicted_volatility` | Source σ from the ML forecasting model instead. Requires `ticker`. |
+   | `ticker` | Instrument to forecast for, e.g. `RELIANCE.NS`. |
+   | `random_seed` | Fixes the draw. Use it when comparing a predicted σ against a manual one, so the difference reflects the parameter and not the sample. |
+
+   The response's `volatility_provenance.source` is one of `manual`,
+   `ml_predicted` or `historical_fallback`. **Never present
+   `historical_fallback` as a forecast** — it is trailing realised
+   volatility, served when the model is unavailable. See the
+   [ML integration contract](../../backend/app/ml/README.md).
 
 2. **GET** `/api/monte-carlo/simulations?limit=20`
    - Lists simulation history
@@ -104,6 +120,13 @@ Fields:
 6. **PUT** `/api/monte-carlo/simulations/{id}`
    - Updates name and notes
    - For organizing simulations
+
+7. **GET** `/api/monte-carlo/explain?simulation_id={id}`
+   - AI-generated explanation of a run, cached per simulation
+   - Pass `simulation_id` from the simulate response. Omitting it
+     explains the latest *saved* run, which is a different simulation
+     if the run used `save=false`.
+   - Ollama on CPU takes 90-120s on a cache miss; instant thereafter
 
 ### 2. Frontend Implementation ✅
 
@@ -178,22 +201,40 @@ Fields:
 
 ### Mathematical Foundation
 
-**1. Random Walk with Drift**
+**1. Geometric Brownian Motion (monthly steps)**
 ```
-Monthly Return = Normal(μ/12, σ/√12)
+Monthly LOG return = Normal(m_dt, s_dt)
 where:
-  μ = expected annual return
-  σ = annual volatility
+  μ    = expected annual return (simple)
+  σ    = annual volatility of log returns
+  dt   = 1/12
+  s_dt = σ × sqrt(dt)
+  m_dt = dt × ln(1 + μ) − (s_dt² / 2)
 ```
+
+Note this draws a **log** return, not a simple one. The earlier
+formulation drew `Normal(μ/12, σ/√12)` as a simple return and added it,
+which is a different (and, at high σ, unsafe) model.
 
 **2. Portfolio Evolution**
 ```
-V(t+1) = V(t) × (1 + r(t)) + C
+V(t+1) = V(t) × exp(m_dt + s_dt × Z) + C,   Z ~ N(0, 1)
 where:
-  V(t) = portfolio value at time t
-  r(t) = random return at time t
-  C = monthly contribution
+  V(t)  = portfolio value at time t
+  dt    = 1/12 (monthly steps)
+  s_dt  = σ × sqrt(dt)
+  m_dt  = dt × ln(1 + μ) − (s_dt² / 2)     <- Ito correction
+  C     = monthly contribution
 ```
+
+Steps are taken in LOG space and applied multiplicatively, so every path
+stays strictly positive. An earlier additive form, `V × (1 + r)` with
+normal `r`, could drive a path negative once σ grew large — tolerable for
+a hand-typed 15%, not for a model-predicted 80%.
+
+The Ito correction keeps the simulated arithmetic mean equal to the
+requested `expected_return`: E[V_T] = V_0 × (1 + μ)^years exactly, for
+any σ.
 
 **3. Simulation Process**
 ```
@@ -346,7 +387,8 @@ P(Loss) = (Simulations where Final < Total Invested) / Total Simulations
 ### Validation Rules
 - Initial investment: > 0
 - Expected return: -1 to 1 (-100% to +100%)
-- Volatility: 0 to 1 (0% to 100%)
+- Volatility: 0 to 5 (0% to 500%). The cap was 1.0, which rejected
+  legitimate model-predicted volatility above 100% annualised with a 422.
 - Years: 1 to 50
 - Num simulations: 1,000 to 50,000
 - Monthly contribution: ≥ 0
@@ -422,11 +464,20 @@ curl http://localhost:8000/api/monte-carlo/simulations?limit=10
 
 ## Limitations
 
-1. **Assumptions**: Assumes normal distribution of returns
+1. **Assumptions**: Log returns are normal, so terminal values are
+   lognormal. Returns themselves are therefore not normally distributed.
 2. **No Market Timing**: Doesn't account for market cycles
-3. **Static Parameters**: Return and volatility are constant
-4. **No Correlation**: Assumes independence between periods
-5. **Historical Bias**: Based on historical return patterns
+3. **Static Parameters**: Return and volatility are constant over the horizon
+4. **No Correlation**: Assumes independence between periods — real
+   volatility clusters, which is precisely what the forecasting model
+   exploits when supplying σ
+5. **Mean vs median**: Because terminal values are lognormal, the sample
+   mean is a high-variance estimator dominated by a few extreme paths. At
+   σ = 120% the sample mean of 50,000 paths sits ~47% below the analytic
+   mean. Report `scenarios.average_case` (the median) as the typical
+   outcome, not `statistics.mean_value`.
+6. **Single asset σ**: One volatility is applied to the whole portfolio;
+   there is no per-holding covariance structure.
 
 ## Best Practices
 
@@ -457,4 +508,6 @@ All features implemented, tested, and fully functional.
 
 **Implementation Date**: 2026-07-12  
 **Module Version**: 1.0.0  
-**Status**: Production Ready (with TEST_USER_ID workaround)
+**Status**: Functional. Authentication enforced; volatility may be supplied
+manually or sourced from the ML forecasting model (see
+[ML integration contract](../../backend/app/ml/README.md)).

@@ -15,13 +15,22 @@ The Smart Investment Portfolio Advisor is a full-stack web application that prov
 - Recharts 2.10.3
 
 **Backend:**
-- FastAPI 0.109.0
-- Python 3.9+
-- SQLAlchemy 2.0.25
-- SQLite (Development) / PostgreSQL (Production)
+- FastAPI 0.141.1
+- Python 3.13
+- SQLAlchemy 2.0.52 + Alembic 1.19.1 (migrations)
+- SQLite (development) / PostgreSQL (production)
 
 **Data Sources:**
-- Yahoo Finance (yfinance)
+- Yahoo Finance via `yfinance` (unofficial scraper, no API key),
+  disk-cached to parquet under `backend/data_cache/`
+
+**AI / ML:**
+- Ollama + `qwen2.5:3b` for generated explanations (`/api/*/explain`)
+- scikit-learn volatility forecasting model, trained offline and loaded
+  at runtime via joblib (`/api/ml/*`)
+- `arch` / `statsmodels` for the GARCH and HAR baselines
+- These are two separate subsystems: one produces prose, the other a
+  number. Neither depends on the other.
 
 **Authentication:**
 - JWT (JSON Web Tokens)
@@ -238,32 +247,75 @@ The Smart Investment Portfolio Advisor is a full-stack web application that prov
 
 ### 4.2 API Endpoints Structure
 
+Generated from the live OpenAPI schema. Every endpoint below except
+`/auth/register` and `/auth/login` requires a bearer token.
+
 ```
 /api
 ├── /auth
-│   ├── POST   /register       # Register new user
-│   ├── POST   /login          # Login user
-│   └── GET    /me             # Get current user
+│   ├── POST   /register                   # Register
+│   ├── POST   /login                      # Login
+│   └── GET    /me                         # Read Current User
 ├── /users
-│   ├── GET    /{user_id}      # Get user by ID
-│   └── PUT    /{user_id}      # Update user
+│   ├── GET    /{user_id}                  # Get User
+│   └── PUT    /{user_id}                  # Update User
 ├── /profile
-│   ├── POST   /               # Create financial profile
-│   ├── GET    /{user_id}      # Get financial profile
-│   └── PUT    /{user_id}      # Update financial profile
+│   ├── POST   /                           # Create Financial Profile
+│   ├── GET    /                           # Get Financial Profile
+│   ├── PUT    /                           # Update Financial Profile
+│   └── DELETE /                           # Delete Financial Profile
 ├── /risk
-│   ├── POST   /assess         # Assess risk profile
-│   └── GET    /profile/{id}   # Get risk profile
-├── /portfolio
-│   ├── GET    /recommend      # Get recommendations
-│   ├── GET    /current/{id}   # Get current portfolio
-│   └── POST   /simulate       # Simulate growth
+│   ├── POST   /calculate                  # Calculate Risk Profile
+│   ├── GET    /                           # Get Risk Profile
+│   ├── DELETE /                           # Delete Risk Profile
+│   └── GET    /explain                    # Explain Risk Profile
+├── /recommendation
+│   ├── POST   /generate                   # Generate Recommendation
+│   ├── GET    /                           # Get Recommendation
+│   ├── DELETE /                           # Delete Recommendation
+│   └── GET    /explain                    # Explain Recommendation
+├── /portfolio-analysis
+│   ├── POST   /analyze                    # Analyze Portfolio
+│   ├── GET    /latest                     # Get Latest Analysis
+│   ├── POST   /generate-sample-data       # Generate Sample Data
+│   └── GET    /explain                    # Explain Portfolio Analysis
+├── /diversification-analysis
+│   ├── POST   /analyze                    # Analyze Diversification
+│   ├── GET    /latest                     # Get Latest Analysis
+│   ├── GET    /history                    # Get Analysis History
+│   ├── POST   /generate-sample-holdings   # Generate Sample Holdings
+│   ├── DELETE /{analysis_id}              # Delete Analysis
+│   └── GET    /explain                    # Explain Diversification Analysis
+├── /monte-carlo
+│   ├── POST   /simulate                   # Run Simulation
+│   ├── GET    /simulations                # Get Simulations
+│   ├── GET    /simulations/{simulation_id}# Get Simulation
+│   ├── DELETE /simulations/{simulation_id}# Delete Simulation
+│   ├── PUT    /simulations/{simulation_id}# Update Simulation
+│   ├── GET    /latest                     # Get Latest Simulation
+│   └── GET    /explain                    # Explain Monte Carlo Simulation
 ├── /sip
-│   ├── POST   /plan           # Create SIP plan
-│   └── GET    /plans/{id}     # Get user SIP plans
-└── /market
-    ├── GET    /stocks         # Search stocks
-    └── GET    /stock/{symbol} # Get stock details
+│   ├── POST   /calculate                  # Calculate Sip
+│   ├── POST   /explain                    # Explain Sip Calculation
+│   ├── POST   /plans                      # Create Sip Plan
+│   ├── GET    /plans                      # Get Sip Plans
+│   ├── GET    /plans/{plan_id}            # Get Sip Plan
+│   ├── PUT    /plans/{plan_id}            # Update Sip Plan
+│   └── DELETE /plans/{plan_id}            # Delete Sip Plan
+├── /market
+│   ├── GET    /search                     # Search Stocks
+│   ├── GET    /stock/{ticker}             # Get Stock Info
+│   ├── GET    /stock/{ticker}/history     # Get Stock History
+│   └── GET    /stock/{ticker}/explain     # Explain Stock Trend
+├── /ml
+│   ├── POST   /predict-volatility         # Predict Volatility
+│   ├── GET    /model-info                 # Get Model Info
+│   ├── POST   /reload-model               # Reload Model
+│   ├── GET    /features/{ticker}          # Get Feature Snapshot
+│   └── GET    /cache-status               # Get Cache Status
+└── /ollama
+    ├── GET    /health                     # Check Ollama Health
+    └── GET    /test                       # Test Ollama Generation
 ```
 
 ### 4.3 Request/Response Flow
@@ -449,7 +501,7 @@ Update UI with Results
 - **Fast:** High performance, async support
 - **Easy:** Automatic API documentation
 - **Type Safe:** Pydantic validation
-- **Modern:** Python 3.9+ features
+- **Modern:** Python 3.13 features
 
 ### 9.2 Why React?
 
@@ -483,26 +535,28 @@ Update UI with Results
 - UI components
 - API structure
 
-### Phase 2: Core Features 🔄
+### Phase 2: Core Features ✅
 - Risk profiling engine
 - Portfolio recommendations
 - SIP calculator
 - Market data integration
 - Dashboard with real data
 
-### Phase 3: Advanced Features 🎯
-- Machine learning models
-- Advanced analytics
-- Real-time data
-- Performance tracking
-- Notifications
+### Phase 3: Advanced Features 🔄
+- ✅ Monte Carlo simulation (geometric Brownian motion, VaR/CVaR)
+- ✅ Diversification and portfolio risk analytics
+- ✅ AI-generated explanations (Ollama), cached per record
+- ✅ ML integration layer: shared feature pipeline, artifact contract,
+     prediction service with fallback, `/api/ml/*` endpoints
+- 🔄 Volatility model training and evaluation against the naive, HAR and
+     GARCH(1,1) baselines — the remaining step
+- ⬜ Real-time data, performance tracking, notifications
 
-### Phase 4: Production 🚀
-- Testing
-- Security audit
-- Performance optimization
-- Deployment
-- Monitoring
+### Phase 4: Production 🔄
+- ✅ Automated tests (118, pytest)
+- ✅ Alembic migrations
+- ✅ Per-user authorization on every data endpoint
+- ⬜ Security audit, PostgreSQL migration, deployment, monitoring
 
 ---
 
