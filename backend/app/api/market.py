@@ -3,26 +3,54 @@ Market Data API Routes
 Handles stock search and market data using Yahoo Finance
 """
 
+import logging
+import time
+from typing import Dict, Optional, Tuple
+
 from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
-from typing import Optional
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.security import get_current_user_id
+from app.ml.data import InvalidTickerError, PriceDataError
 from app.models.user import User
+from app.schemas.ml_prediction import TrendExplanationResponse
 from app.schemas.stock import (
     StockInfoResponse,
     HistoricalDataResponse,
     StockSearchResponse,
     HistoricalDataPoint
 )
+from app.services.explanation_guard import apply_outlook_guard
+from app.services.stock_trend_service import stock_trend_service
 from app.services.yahoo_finance_service import YahooFinanceService
 from app.services.ollama_service import ollama_service
 from app.services.ollama_prompts import OllamaPrompts
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# A Stock Predictor explanation depends only on the outlook's numbers, and
+# on CPU the 3B model needs ~40-100s to write one. Successful explanations
+# are therefore cached in memory, keyed on everything the prompt uses, so
+# re-opening the same stock does not wait for the model again.
+_OUTLOOK_EXPLAIN_TTL_SECONDS = 6 * 3600
+_OUTLOOK_EXPLAIN_MAX_ENTRIES = 128
+_outlook_explain_cache: Dict[Tuple, Tuple[float, str]] = {}
+
+
+def _outlook_cache_key(outlook: Dict) -> Tuple:
+    return (
+        outlook["ticker"],
+        outlook["as_of"],
+        outlook["probability_source"],
+        outlook.get("model_version"),
+        round(outlook["probability_up"], 4),
+        round(outlook["volatility"], 4),
+    )
 
 
 
@@ -134,6 +162,90 @@ async def get_stock_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch historical data: {str(e)}"
         )
+
+
+@router.get("/stock/{ticker}/outlook/explain", response_model=TrendExplanationResponse)
+async def explain_stock_outlook(
+    ticker: str,
+    current_user_id: int = Depends(get_current_user)
+):
+    """
+    AI-generated plain-language explanation of the Stock Predictor outlook.
+
+    This is Ollama prose, not a model output, and it lives here rather than
+    under /api/ml/* so that distinction survives in the API surface. The
+    numbers it explains come from `/api/ml/trend-outlook/{ticker}`.
+
+    The prompt forbids calling the historical base rate a prediction,
+    saying the stock "will" move, and buy/sell advice. A failed or disabled
+    Ollama is reported through `ai_available`, not an error status, so the
+    page degrades the way the other modules do.
+    """
+    try:
+        outlook = await run_in_threadpool(stock_trend_service.get_outlook, ticker)
+    except InvalidTickerError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except PriceDataError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Price data unavailable for {ticker}: {e}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    base = {
+        "ticker": outlook["ticker"],
+        "as_of": outlook["as_of"],
+        "probability_source": outlook["probability_source"],
+        "disclaimer": outlook["disclaimer"],
+    }
+
+    key = _outlook_cache_key(outlook)
+    hit = _outlook_explain_cache.get(key)
+    if hit and (time.monotonic() - hit[0]) < _OUTLOOK_EXPLAIN_TTL_SECONDS:
+        return TrendExplanationResponse(
+            **base, ai_explanation=hit[1], ai_available=True, cached=True
+        )
+
+    result = await ollama_service.generate_explanation(
+        prompt=OllamaPrompts.stock_outlook_explanation(outlook),
+        system_prompt=OllamaPrompts.SYSTEM_FINANCIAL_ADVISOR,
+        temperature=0.3,   # lower than elsewhere: this one must stay factual
+        max_tokens=400,
+    )
+
+    if not result.get("success"):
+        return TrendExplanationResponse(
+            **base,
+            ai_explanation=result.get("explanation", "AI explanation unavailable"),
+            ai_available=False,
+            cached=False,
+        )
+
+    # The prompt asks the model to follow the rules; this checks that it did.
+    safe_text, rejection = apply_outlook_guard(result["explanation"], outlook)
+    if safe_text is None:
+        logger.warning(
+            "Discarded outlook explanation for %s: %s | text: %.300s",
+            outlook["ticker"], rejection, result["explanation"],
+        )
+        return TrendExplanationResponse(
+            **base,
+            ai_explanation=(
+                "The generated explanation broke the wording rules for this module "
+                "and was discarded. Try again."
+            ),
+            ai_available=False,
+            cached=False,
+        )
+
+    if len(_outlook_explain_cache) >= _OUTLOOK_EXPLAIN_MAX_ENTRIES:
+        _outlook_explain_cache.pop(next(iter(_outlook_explain_cache)))
+    _outlook_explain_cache[key] = (time.monotonic(), safe_text)
+
+    return TrendExplanationResponse(
+        **base, ai_explanation=safe_text, ai_available=True, cached=False,
+    )
 
 
 @router.get("/stock/{ticker}/explain")

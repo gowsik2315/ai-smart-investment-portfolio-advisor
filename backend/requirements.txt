@@ -34,6 +34,10 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 pydantic==2.13.4
 pydantic-settings==2.15.0
+# Required at runtime by pydantic's EmailStr (app/schemas/user.py). Without it
+# the app fails on import in a fresh environment; it was previously present
+# only by accident in the original venv.
+email-validator==2.3.0
 
 # ── Data Processing ──────────────────────────────────────────
 pandas==3.0.5

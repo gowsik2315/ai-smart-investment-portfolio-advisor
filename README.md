@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-green.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-118%20passing-brightgreen.svg)](backend/tests/)
+[![Tests](https://img.shields.io/badge/tests-268%20passing-brightgreen.svg)](backend/tests/)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -94,6 +94,18 @@ The **AI Smart Investment Portfolio Advisor** is a comprehensive financial manag
 - **Distinct from the explanations above** — a trained regressor
   returning a number, not an LLM returning prose
 
+### 📈 Stock Predictor
+- A 21-trading-day outlook for any stock: current trend, probability of a
+  rise, and an expected price range drawn as a fan chart
+- Reports the stock's own **historical base rate** beside the probability,
+  because most large stocks rise more often than they fall over a month
+- Until a classifier is trained, the probability *is* that base rate and the
+  page says so ("Not a prediction") rather than passing it off as ML
+- The range is centred on today's price: it shows how far, not which way
+- An optional **Explain** button writes a plain-language reading with the
+  local LLM; its output is checked by a deterministic guard that rejects
+  advice and certainty, so the wording rules don't rest on the model's compliance
+
 ---
 
 ## 🚀 Quick Start
@@ -181,7 +193,7 @@ AI Smart Investment Portfolio Advisor/
 │   │   │   ├── monte_carlo.py        # Simulation + VaR/CVaR
 │   │   │   ├── sip.py                # SIP planning
 │   │   │   ├── market.py             # Stock search / history
-│   │   │   ├── ml.py                 # Volatility forecasting
+│   │   │   ├── ml.py                 # Volatility + trend outlook
 │   │   │   └── ollama_health.py      # LLM health check
 │   │   │
 │   │   ├── core/
@@ -190,18 +202,21 @@ AI Smart Investment Portfolio Advisor/
 │   │   │   ├── dependencies.py       # Shared JWT dependency
 │   │   │   └── security.py           # bcrypt + JWT
 │   │   │
-│   │   ├── ml/                       # Volatility forecasting library
+│   │   ├── ml/                       # Volatility + trend ML library
 │   │   │   ├── README.md             # >> ML integration contract <<
 │   │   │   ├── config.py             # Universe, horizon, paths
 │   │   │   ├── data.py               # Cached yfinance loader
 │   │   │   ├── features.py           # Features + target (shared!)
 │   │   │   ├── evaluation.py         # RMSE/MAE/QLIKE + baselines
-│   │   │   └── model_registry.py     # Artifact save/load contract
+│   │   │   ├── model_registry.py     # Volatility artifact contract
+│   │   │   ├── trend.py              # Up/down target, range, scoring
+│   │   │   └── trend_registry.py     # Trend classifier artifact contract
 │   │   │
 │   │   ├── models/                   # SQLAlchemy ORM models (10)
 │   │   ├── schemas/                  # Pydantic request/response
 │   │   └── services/                 # Business logic
 │   │       ├── ml_prediction_service.py  # Forecast + fallback chain
+│   │       ├── stock_trend_service.py    # Stock Predictor outlook
 │   │       ├── monte_carlo_simulator.py  # Geometric Brownian motion
 │   │       ├── ollama_service.py         # LLM client
 │   │       ├── ollama_prompts.py
@@ -214,10 +229,11 @@ AI Smart Investment Portfolio Advisor/
 │   │
 │   ├── alembic/                      # Database migrations
 │   │   └── versions/
-│   ├── tests/                        # pytest suite (118 tests)
+│   ├── tests/                        # pytest suite (268 tests)
 │   ├── ml/                           # Offline dataset scripts
 │   │   ├── generate_investor_dataset.py    # Synthetic (unused by app)
-│   │   └── prepare_volatility_dataset.py   # Real NSE price panel
+│   │   ├── prepare_volatility_dataset.py   # Real NSE price panel
+│   │   └── prepare_trend_dataset.py        # Up/down labels, same features
 │   ├── models/                       # Trained artifacts (gitignored)
 │   ├── data_cache/                   # Parquet price cache (gitignored)
 │   ├── datasets/                     # Generated datasets (gitignored)
@@ -231,7 +247,7 @@ AI Smart Investment Portfolio Advisor/
 │   ├── src/
 │   │   ├── components/               # Layout + reusable UI
 │   │   ├── context/AuthContext.js    # Auth state
-│   │   ├── pages/                    # 14 pages
+│   │   ├── pages/                    # 15 pages
 │   │   ├── services/                 # API clients
 │   │   │   ├── api.js                # Shared axios instance
 │   │   │   ├── mlService.js          # Volatility forecasting
@@ -283,15 +299,19 @@ AI Smart Investment Portfolio Advisor/
 
 ## 🧠 Machine Learning
 
-The project contains **two unrelated datasets**. Keeping them straight
-matters, because one is real and one is not:
+The project contains **a synthetic dataset and two real ones**. Keeping
+them straight matters, because one is real and one is not:
 
-| | Synthetic investor dataset | Volatility panel |
-|---|---|---|
-| Source | `numpy` RNG, seed 42 | Yahoo Finance daily OHLCV |
-| Size | 50,000 rows | 9,680 rows × 21 features, 10 NSE tickers |
-| Built by | `ml/generate_investor_dataset.py` | `ml/prepare_volatility_dataset.py` |
-| Used by the app? | **No** | Yes — feeds Monte Carlo's sigma |
+| | Synthetic investor dataset | Volatility panel | Trend panel |
+|---|---|---|---|
+| Source | `numpy` RNG, seed 42 | Yahoo Finance daily OHLCV | Yahoo Finance daily OHLCV |
+| Size | 50,000 rows | 21 features, 10 NSE tickers | 21,990 rows × 21 features, 10 NSE tickers |
+| Target | none that exists in the world | next-21-day realised volatility | closes higher in 21 days (0/1) |
+| Built by | `ml/generate_investor_dataset.py` | `ml/prepare_volatility_dataset.py` | `ml/prepare_trend_dataset.py` |
+| Used by the app? | **No** | Yes — feeds Monte Carlo's sigma | Yes — Stock Predictor |
+
+The two real panels share the same 21 features (`app/ml/features.py`) and
+differ only in the target.
 
 The synthetic investor dataset generates its own labels from a weighted
 scoring rule, so a classifier trained on it largely recovers that rule
@@ -299,12 +319,21 @@ plus noise. The equivalent logic already ships deterministically in
 `app/services/risk_calculator.py`, which is why **Risk Assessment is
 rule-based, not ML**. The dataset is retained for reference only.
 
-The genuine ML work is **volatility forecasting**:
+The genuine ML work is **volatility forecasting**, with the **Stock
+Predictor** as a second, more cautious use of the same pipeline:
 
 - **Target**: realised volatility over the next 21 trading days,
   annualised. Not returns — daily and monthly returns are close to
   unpredictable from price history, whereas volatility clusters and
   persists, so a model can beat a naive baseline by a measurable margin.
+- **Stock Predictor** does estimate direction, so it is held to a stricter
+  standard: it reports the probability of a rise *beside the stock's own
+  historical base rate*, scores models on Brier skill rather than accuracy,
+  and says plainly when no model is loaded or a model fails to beat the
+  base rate. On this dataset the training period rose in 58% of 21-day
+  windows but the test period only 46%, so an "always up" predictor scores
+  below a coin flip out of sample. See
+  [docs/modules/stock-predictor.md](docs/modules/stock-predictor.md).
 - **Baselines it must beat**: naive persistence ("next month equals this
   month"), HAR, and GARCH(1,1), scored on RMSE, MAE and QLIKE.
 - **No API key is required** for market data; `yfinance` reads public
@@ -317,7 +346,9 @@ baselines, and how to save a model the API will accept — is in
 
 ```bash
 POST /api/ml/predict-volatility   {"ticker": "RELIANCE.NS"}
-GET  /api/ml/model-info           # is a model loaded, and which
+GET  /api/ml/model-info           # is a volatility model loaded, and which
+GET  /api/ml/trend-outlook/RELIANCE.NS   # Stock Predictor
+GET  /api/ml/trend-model-info            # is a trend classifier loaded
 ```
 
 ---
@@ -423,7 +454,7 @@ User Input → React Frontend → FastAPI Backend → Services Layer
 ### Automated tests
 ```bash
 cd backend
-pytest                 # 118 tests
+pytest                 # 268 tests
 ```
 
 Covers the Monte Carlo simulator's maths (including closed-form drift
@@ -457,7 +488,8 @@ These are two unrelated datasets - see **Machine Learning** below.
   [diversification](docs/modules/diversification.md) |
   [Monte Carlo](docs/modules/monte-carlo.md) |
   [SIP planner](docs/modules/sip-planner.md) |
-  [stock explorer](docs/modules/stock-explorer.md)
+  [stock explorer](docs/modules/stock-explorer.md) |
+  [stock predictor](docs/modules/stock-predictor.md)
 - **Deployment**: [docs/deployment.md](docs/deployment.md)
 - **Testing**: [docs/testing.md](docs/testing.md)
 - **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -519,7 +551,7 @@ These are two unrelated datasets - see **Machine Learning** below.
 - [x] ML integration seam — feature pipeline, artifact contract,
       prediction service with fallback, `/api/ml/*` endpoints
 - [x] Geometric Brownian motion Monte Carlo with VaR/CVaR
-- [x] Alembic migrations, 118 automated tests
+- [x] Alembic migrations, 268 automated tests
 - [ ] **Train and evaluate the volatility model** against the naive,
       HAR and GARCH(1,1) baselines — the remaining step
 - [ ] Advanced portfolio optimization algorithms
@@ -598,11 +630,11 @@ For setup issues or questions:
 
 ## 📊 Project Statistics
 
-- **Backend endpoints**: 54 operations across 43 paths
-- **Frontend pages**: 14
+- **Backend endpoints**: 58 operations across 47 paths
+- **Frontend pages**: 15
 - **Database tables**: 10 (+ Alembic migrations)
-- **Automated tests**: 118
-- **AI explanation endpoints**: 7 (`/api/*/explain`)
+- **Automated tests**: 268
+- **AI explanation endpoints**: 8 (`/api/*/explain`)
 - **Volatility features**: 21, over a 10-ticker NSE panel
 - **Synthetic investor dataset**: 50,000 rows (unused by the app — see
   Machine Learning)

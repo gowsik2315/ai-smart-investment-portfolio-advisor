@@ -216,16 +216,34 @@ def list_artifacts() -> List[Dict[str, Any]]:
     if not MODELS_DIR.exists():
         return []
 
+    # Imported here because trend_registry imports this module
+    from app.ml.config import DEFAULT_TREND_MODEL_PATH
+    from app.ml.trend_registry import TrendModelArtifact
+
+    defaults = {
+        DEFAULT_MODEL_PATH.resolve(): "volatility",
+        DEFAULT_TREND_MODEL_PATH.resolve(): "trend",
+    }
+
     rows = []
     for path in sorted(MODELS_DIR.glob("*.joblib")):
         row: Dict[str, Any] = {
             "file": path.name,
             "size_kb": round(path.stat().st_size / 1024, 1),
-            "is_default": path.resolve() == DEFAULT_MODEL_PATH.resolve(),
+            "is_default": path.resolve() in defaults,
         }
         try:
-            artifact = load_model(path, strict=False)
+            artifact = joblib.load(path)
+            if isinstance(artifact, TrendModelArtifact):
+                kind = "trend"
+            elif isinstance(artifact, VolatilityModelArtifact):
+                kind = "volatility"
+            else:
+                raise ModelContractError(
+                    f"contains {type(artifact).__name__}, not a known model artifact"
+                )
             row.update({
+                "kind": kind,
                 "model_version": artifact.model_version,
                 "estimator": type(artifact.model).__name__,
                 "trained_at": artifact.trained_at,

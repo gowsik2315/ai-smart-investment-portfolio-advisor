@@ -24,6 +24,7 @@ import DiversificationAnalysis from './pages/DiversificationAnalysis';
 import MonteCarloSimulation from './pages/MonteCarloSimulation';
 import SIPPlanner from './pages/SIPPlanner';
 import StockExplorer from './pages/StockExplorer';
+import StockPredictor from './pages/StockPredictor';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -48,7 +49,8 @@ function App() {
             <Route path="monte-carlo" element={<MonteCarloSimulation />} />
             <Route path="sip-planner" element={<SIPPlanner />} />
             <Route path="stocks" element={<StockExplorer />} />
-            
+            <Route path="stock-predictor" element={<StockPredictor />} />
+
             {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Route>

@@ -6,6 +6,8 @@ Pydantic models for the volatility forecasting endpoints.
 from pydantic import BaseModel, Field, field_validator
 from typing import Any, Dict, List, Optional
 
+from app.ml.data import InvalidTickerError, validate_ticker
+
 
 class VolatilityPredictionRequest(BaseModel):
     """Request a volatility forecast for one ticker."""
@@ -21,7 +23,10 @@ class VolatilityPredictionRequest(BaseModel):
     @field_validator("ticker")
     @classmethod
     def normalise_ticker(cls, v: str) -> str:
-        return v.strip().upper()
+        try:
+            return validate_ticker(v)
+        except InvalidTickerError as exc:
+            raise ValueError(str(exc)) from exc
 
     class Config:
         json_schema_extra = {"example": {"ticker": "RELIANCE.NS"}}
@@ -96,3 +101,94 @@ class CacheStatusResponse(BaseModel):
     """Contents of the on-disk price cache."""
     cache_entries: List[Dict[str, Any]]
     artifacts: List[Dict[str, Any]]
+
+
+# ── Stock trend outlook ──────────────────────────────────────────────
+
+class TrendSignal(BaseModel):
+    """One technical signal contributing to the descriptive trend."""
+    name: str
+    label: str
+    value: float = Field(..., description="Signal magnitude (a ratio or log return)")
+    bullish: bool
+    detail: str
+
+
+class TrendSummary(BaseModel):
+    """Where the stock is trending now. A description of the past, not a forecast."""
+    label: str = Field(..., description="Bullish | Neutral | Bearish")
+    score: float = Field(..., description="-1 (all signals bearish) to +1 (all bullish)")
+    signals: List[TrendSignal]
+    rsi_14: Optional[float] = None
+    rsi_state: Optional[str] = Field(None, description="overbought | neutral | oversold")
+
+
+class RangePoint(BaseModel):
+    """Expected price bounds `day` trading days after the last close."""
+    day: int
+    median: float
+    lower_68: float
+    upper_68: float
+    lower_95: float
+    upper_95: float
+
+
+class PricePoint(BaseModel):
+    date: str
+    close: float
+
+
+class TrendOutlookResponse(BaseModel):
+    """
+    The 21-day outlook for one stock.
+
+    Check `probability_source` before describing `probability_up`:
+    'ml_predicted' is a model output; 'historical_base_rate' is the stock's
+    own past frequency of rising and is NOT a prediction.
+    """
+    ticker: str
+    as_of: str = Field(..., description="Date of the last close used")
+    last_close: float
+    horizon_days: int
+
+    probability_up: float = Field(..., description="Chance of closing higher at the horizon")
+    probability_source: str = Field(..., description="'ml_predicted' | 'historical_base_rate'")
+    base_rate_up: float = Field(
+        ..., description="Historical share of 21-day windows that ended higher; the bar a model must beat"
+    )
+    model_version: Optional[str] = None
+    fallback_reason: Optional[str] = None
+    model_metrics: Optional[Dict[str, Optional[float]]] = Field(
+        None, description="Held-out scores stored in the artifact, when a model is loaded"
+    )
+
+    trend: TrendSummary
+
+    volatility: float = Field(..., description="Annualised volatility used for the range (decimal)")
+    volatility_source: str = Field(..., description="'ml_predicted' | 'historical_fallback'")
+    volatility_fallback_reason: Optional[str] = None
+    expected_range: List[RangePoint] = Field(
+        ..., description="Day-by-day bands centred on the last close; carries no directional view"
+    )
+
+    recent_prices: List[PricePoint]
+    disclaimer: str
+
+    model_config = {"protected_namespaces": ()}
+
+
+class TrendExplanationResponse(BaseModel):
+    """
+    AI-generated (Ollama) explanation of a trend outlook.
+
+    This is generated prose, not a model output. `ai_available` is false
+    when Ollama is disabled or fails; `ai_explanation` then holds a short
+    notice rather than an explanation.
+    """
+    ticker: str
+    as_of: str
+    probability_source: str = Field(..., description="Which source the explained probability had")
+    ai_explanation: str
+    ai_available: bool
+    cached: bool = Field(False, description="Served from the in-memory cache, not freshly generated")
+    disclaimer: str

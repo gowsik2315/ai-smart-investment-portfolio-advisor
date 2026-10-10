@@ -31,6 +31,7 @@ frontend wiring.
 | Monte Carlo Simulation | [modules/monte-carlo.md](modules/monte-carlo.md) |
 | SIP Planner | [modules/sip-planner.md](modules/sip-planner.md) |
 | Stock Explorer | [modules/stock-explorer.md](modules/stock-explorer.md) |
+| Stock Predictor | [modules/stock-predictor.md](modules/stock-predictor.md) |
 
 ## Live API reference
 

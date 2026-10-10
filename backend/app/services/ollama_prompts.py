@@ -237,6 +237,89 @@ Please explain:
 Keep under 200 words. Make it understandable for someone new to investing."""
 
     @staticmethod
+    def stock_outlook_explanation(outlook: Dict) -> str:
+        """
+        Prompt for explaining a Stock Predictor outlook.
+
+        The figures are computed upstream and handed to the model as facts.
+        The rules matter more than the wording: a small local model will
+        happily call a historical frequency "a prediction", say a stock
+        "will" rise, or slip into buy/sell advice, and each of those would
+        misstate what the numbers are. Which rules apply depends on whether
+        the probability came from a trained model or is just the base rate.
+        """
+        symbol = '₹' if outlook['ticker'].upper().endswith(('.NS', '.BO')) else '$'
+        price = outlook['last_close']
+        horizon = outlook['horizon_days']
+
+        p_up = outlook['probability_up'] * 100
+        base = outlook['base_rate_up'] * 100
+        diff = p_up - base
+
+        trend = outlook['trend']
+        bullish = sum(1 for s in trend['signals'] if s['bullish'])
+        n_signals = len(trend['signals'])
+
+        end = outlook['expected_range'][-1]
+
+        def span(lo: float, hi: float) -> str:
+            return (f"{symbol}{lo:,.2f} to {symbol}{hi:,.2f} "
+                    f"({(lo / price - 1) * 100:+.1f}% to {(hi / price - 1) * 100:+.1f}%)")
+
+        is_model = outlook['probability_source'] == 'ml_predicted'
+        metrics = outlook.get('model_metrics') or {}
+        skill = metrics.get('brier_skill_score')
+
+        if is_model:
+            source_line = f"a trained model ({outlook.get('model_version')})"
+            rules = [
+                "Compare the probability with the historical frequency.",
+                "If they differ by less than 3 percentage points, say the model shows "
+                "no meaningful edge over what the stock does anyway.",
+            ]
+            if skill is not None and skill <= 0:
+                rules.append(
+                    "The model did NOT beat the historical frequency in testing. "
+                    "Say so plainly and tell the reader to treat the probability with caution."
+                )
+        else:
+            source_line = "NOT a model: it is only the stock's own historical frequency of rising"
+            rules = [
+                "This probability is NOT a prediction. No trained model is loaded. "
+                "It only says how often this stock rose over 21 trading days in the past. "
+                "Say this clearly and do not describe it as a forecast.",
+            ]
+
+        vol_source = ("a machine-learning forecast" if outlook['volatility_source'] == 'ml_predicted'
+                      else "the last 21 days of actual price swings, not a forecast")
+        rsi = trend.get('rsi_14')
+        rsi_text = f" RSI is {rsi} ({trend.get('rsi_state')})." if rsi is not None else ""
+        rule_text = "\n".join(f"- {r}" for r in rules)
+
+        return f"""You are explaining a stock outlook that software calculated. Use ONLY the facts below. Do not invent any number.
+
+FACTS
+- Stock: {outlook['ticker']}, last close {symbol}{price:,.2f} on {outlook['as_of']}
+- Current trend (describes the past, not a forecast): {trend['label']}, with {bullish} of {n_signals} signals bullish.{rsi_text}
+- Probability of closing higher in {horizon} trading days: {p_up:.1f}%
+  - Where it comes from: {source_line}
+  - This stock's own historical frequency of rising: {base:.1f}% (difference {diff:+.1f} percentage points)
+- Likely range in {horizon} trading days (68% chance): {span(end['lower_68'], end['upper_68'])}
+- Wide range (95% chance): {span(end['lower_95'], end['upper_95'])}
+- Volatility behind the range: {outlook['volatility'] * 100:.1f}% a year, from {vol_source}
+
+WRITE a plain-language explanation of under 170 words, in four short parts:
+1. Trend: what it says about the recent past, and that it is not a forecast.
+2. Probability: begin with this exact sentence: "The data shows a {p_up:.1f}% chance of closing higher in {horizon} trading days, compared with {base:.1f}% historically." Then say what that comparison means.
+3. Range: how far the price may move. The range says nothing about which direction.
+4. One sentence on the main limitation.
+
+RULES
+- Never say the stock "will" rise or fall. Say "chance of closing higher", never "will close higher".
+- Never tell the reader to buy, sell or hold, and never call anything guaranteed.
+{rule_text}"""
+
+    @staticmethod
     def general_financial_query(query: str, context: Dict = None) -> str:
         """Generate prompt for general financial questions"""
         

@@ -52,6 +52,24 @@ const marketService = {
     const response = await api.get(`/api/market/stock/${ticker}/explain`);
     return response.data;
   },
+
+  /**
+   * Get an AI-generated (Ollama) explanation of the Stock Predictor outlook
+   * for a stock. This is generated prose, not a model output.
+   *
+   * Slow on CPU (the 3B model needs ~40-100s) but cached server-side, so a
+   * repeat request for the same outlook returns immediately.
+   *
+   * @param {string} ticker - Stock ticker symbol
+   * @returns {Promise} { ai_explanation, ai_available, cached, disclaimer, ... }
+   */
+  explainOutlook: async (ticker) => {
+    const response = await api.get(
+      `/api/market/stock/${encodeURIComponent(ticker)}/outlook/explain`,
+      { timeout: 240000 }
+    );
+    return response.data;
+  },
 };
 
 export default marketService;

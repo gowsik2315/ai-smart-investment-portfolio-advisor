@@ -88,6 +88,12 @@ const Navbar = () => {
                 >
                   Stocks
                 </Link>
+                <Link
+                  to="/stock-predictor"
+                  className="text-secondary-700 hover:text-primary-600 transition-colors"
+                >
+                  Predictor
+                </Link>
                 <Link 
                   to="/sip-planner" 
                   className="text-secondary-700 hover:text-primary-600 transition-colors"

@@ -239,3 +239,32 @@ rather than an error.
 - **`yfinance` is an unofficial scraper.** Data can be revised, gapped,
   or rate-limited. History is cached to `backend/data_cache/` for this
   reason; `load_history` will serve a stale cache rather than fail.
+
+## Stock trend outlook (the second model)
+
+The same feature pipeline also feeds the Stock Predictor, which estimates
+the probability a stock closes higher in 21 trading days. Only the target and
+the artifact differ.
+
+| | Volatility model | Trend model |
+|---|---|---|
+| Target | next-21-day realised volatility (regression) | closes higher in 21 days (0/1 classification) |
+| Target code | `features.build_target` | `trend.build_trend_target` |
+| Artifact | `VolatilityModelArtifact` via `save_model` | `TrendModelArtifact` via `save_trend_model` |
+| File | `models/volatility_model.joblib` | `models/trend_model.joblib` |
+| Must beat | naive persistence, HAR, GARCH(1,1) | the stock's own historical base rate |
+| Score with | RMSE / MAE / QLIKE | Brier skill score (`trend.evaluate_trend_probabilities`) |
+
+Two rules are specific to the trend model:
+
+- **Judge on Brier skill, not accuracy.** Large stocks rise more often than
+  they fall over a month, so "always up" already scores above 50%. On the
+  shipped dataset the train period rose in 58% of windows but the test
+  period only 46%, so a base-rate predictor scores below a coin flip
+  out-of-sample.
+- **The forward return is not in the training table.** The label is derived
+  from it; leaving it in would feed the model its own answer.
+
+Build the data with `python -m ml.prepare_trend_dataset`. The full guide,
+including a worked training example, is
+[`docs/modules/stock-predictor.md`](../../../docs/modules/stock-predictor.md).

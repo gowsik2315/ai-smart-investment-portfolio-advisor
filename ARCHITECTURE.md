@@ -253,69 +253,73 @@ Generated from the live OpenAPI schema. Every endpoint below except
 ```
 /api
 ├── /auth
-│   ├── POST   /register                   # Register
-│   ├── POST   /login                      # Login
-│   └── GET    /me                         # Read Current User
+│   ├── POST   /register                             # Register
+│   ├── POST   /login                                # Login
+│   └── GET    /me                                   # Read Current User
 ├── /users
-│   ├── GET    /{user_id}                  # Get User
-│   └── PUT    /{user_id}                  # Update User
+│   ├── GET    /{user_id}                            # Get User
+│   └── PUT    /{user_id}                            # Update User
 ├── /profile
-│   ├── POST   /                           # Create Financial Profile
-│   ├── GET    /                           # Get Financial Profile
-│   ├── PUT    /                           # Update Financial Profile
-│   └── DELETE /                           # Delete Financial Profile
+│   ├── POST   /                                     # Create Financial Profile
+│   ├── GET    /                                     # Get Financial Profile
+│   ├── PUT    /                                     # Update Financial Profile
+│   └── DELETE /                                     # Delete Financial Profile
 ├── /risk
-│   ├── POST   /calculate                  # Calculate Risk Profile
-│   ├── GET    /                           # Get Risk Profile
-│   ├── DELETE /                           # Delete Risk Profile
-│   └── GET    /explain                    # Explain Risk Profile
+│   ├── POST   /calculate                            # Calculate Risk Profile
+│   ├── GET    /                                     # Get Risk Profile
+│   ├── DELETE /                                     # Delete Risk Profile
+│   └── GET    /explain                              # Explain Risk Profile
 ├── /recommendation
-│   ├── POST   /generate                   # Generate Recommendation
-│   ├── GET    /                           # Get Recommendation
-│   ├── DELETE /                           # Delete Recommendation
-│   └── GET    /explain                    # Explain Recommendation
+│   ├── POST   /generate                             # Generate Recommendation
+│   ├── GET    /                                     # Get Recommendation
+│   ├── DELETE /                                     # Delete Recommendation
+│   └── GET    /explain                              # Explain Recommendation
 ├── /portfolio-analysis
-│   ├── POST   /analyze                    # Analyze Portfolio
-│   ├── GET    /latest                     # Get Latest Analysis
-│   ├── POST   /generate-sample-data       # Generate Sample Data
-│   └── GET    /explain                    # Explain Portfolio Analysis
+│   ├── POST   /analyze                              # Analyze Portfolio
+│   ├── GET    /latest                               # Get Latest Analysis
+│   ├── POST   /generate-sample-data                 # Generate Sample Data
+│   └── GET    /explain                              # Explain Portfolio Analysis
 ├── /diversification-analysis
-│   ├── POST   /analyze                    # Analyze Diversification
-│   ├── GET    /latest                     # Get Latest Analysis
-│   ├── GET    /history                    # Get Analysis History
-│   ├── POST   /generate-sample-holdings   # Generate Sample Holdings
-│   ├── DELETE /{analysis_id}              # Delete Analysis
-│   └── GET    /explain                    # Explain Diversification Analysis
+│   ├── POST   /analyze                              # Analyze Diversification
+│   ├── GET    /latest                               # Get Latest Analysis
+│   ├── GET    /history                              # Get Analysis History
+│   ├── POST   /generate-sample-holdings             # Generate Sample Holdings
+│   ├── DELETE /{analysis_id}                        # Delete Analysis
+│   └── GET    /explain                              # Explain Diversification Analysis
 ├── /monte-carlo
-│   ├── POST   /simulate                   # Run Simulation
-│   ├── GET    /simulations                # Get Simulations
-│   ├── GET    /simulations/{simulation_id}# Get Simulation
-│   ├── DELETE /simulations/{simulation_id}# Delete Simulation
-│   ├── PUT    /simulations/{simulation_id}# Update Simulation
-│   ├── GET    /latest                     # Get Latest Simulation
-│   └── GET    /explain                    # Explain Monte Carlo Simulation
+│   ├── POST   /simulate                             # Run Simulation
+│   ├── GET    /simulations                          # Get Simulations
+│   ├── GET    /simulations/{simulation_id}          # Get Simulation
+│   ├── DELETE /simulations/{simulation_id}          # Delete Simulation
+│   ├── PUT    /simulations/{simulation_id}          # Update Simulation
+│   ├── GET    /latest                               # Get Latest Simulation
+│   └── GET    /explain                              # Explain Monte Carlo Simulation
 ├── /sip
-│   ├── POST   /calculate                  # Calculate Sip
-│   ├── POST   /explain                    # Explain Sip Calculation
-│   ├── POST   /plans                      # Create Sip Plan
-│   ├── GET    /plans                      # Get Sip Plans
-│   ├── GET    /plans/{plan_id}            # Get Sip Plan
-│   ├── PUT    /plans/{plan_id}            # Update Sip Plan
-│   └── DELETE /plans/{plan_id}            # Delete Sip Plan
+│   ├── POST   /calculate                            # Calculate Sip
+│   ├── POST   /explain                              # Explain Sip Calculation
+│   ├── POST   /plans                                # Create Sip Plan
+│   ├── GET    /plans                                # Get Sip Plans
+│   ├── GET    /plans/{plan_id}                      # Get Sip Plan
+│   ├── PUT    /plans/{plan_id}                      # Update Sip Plan
+│   └── DELETE /plans/{plan_id}                      # Delete Sip Plan
 ├── /market
-│   ├── GET    /search                     # Search Stocks
-│   ├── GET    /stock/{ticker}             # Get Stock Info
-│   ├── GET    /stock/{ticker}/history     # Get Stock History
-│   └── GET    /stock/{ticker}/explain     # Explain Stock Trend
+│   ├── GET    /search                               # Search Stocks
+│   ├── GET    /stock/{ticker}                       # Get Stock Info
+│   ├── GET    /stock/{ticker}/history               # Get Stock History
+│   ├── GET    /stock/{ticker}/outlook/explain       # Explain Stock Outlook
+│   └── GET    /stock/{ticker}/explain               # Explain Stock Trend
 ├── /ml
-│   ├── POST   /predict-volatility         # Predict Volatility
-│   ├── GET    /model-info                 # Get Model Info
-│   ├── POST   /reload-model               # Reload Model
-│   ├── GET    /features/{ticker}          # Get Feature Snapshot
-│   └── GET    /cache-status               # Get Cache Status
+│   ├── POST   /predict-volatility                   # Predict Volatility
+│   ├── GET    /model-info                           # Get Model Info
+│   ├── POST   /reload-model                         # Reload Model
+│   ├── GET    /features/{ticker}                    # Get Feature Snapshot
+│   ├── GET    /trend-outlook/{ticker}               # Get Trend Outlook
+│   ├── GET    /trend-model-info                     # Get Trend Model Info
+│   ├── POST   /reload-trend-model                   # Reload Trend Model
+│   └── GET    /cache-status                         # Get Cache Status
 └── /ollama
-    ├── GET    /health                     # Check Ollama Health
-    └── GET    /test                       # Test Ollama Generation
+    ├── GET    /health                               # Check Ollama Health
+    └── GET    /test                                 # Test Ollama Generation
 ```
 
 ### 4.3 Request/Response Flow
@@ -553,7 +557,7 @@ Update UI with Results
 - ⬜ Real-time data, performance tracking, notifications
 
 ### Phase 4: Production 🔄
-- ✅ Automated tests (118, pytest)
+- ✅ Automated tests (268, pytest)
 - ✅ Alembic migrations
 - ✅ Per-user authorization on every data endpoint
 - ⬜ Security audit, PostgreSQL migration, deployment, monitoring

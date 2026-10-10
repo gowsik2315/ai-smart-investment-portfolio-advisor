@@ -67,6 +67,48 @@ const mlService = {
     const response = await api.get('/api/ml/cache-status');
     return response.data;
   },
+
+  /**
+   * 21-day outlook for a stock: current trend, probability of a rise, and
+   * the expected price range.
+   *
+   * Inspect `probability_source` before describing the probability:
+   *   'ml_predicted'         -> a trained model's output
+   *   'historical_base_rate' -> the stock's own past frequency of rising,
+   *                             NOT a prediction
+   *
+   * The first call for an uncached ticker downloads three years of daily
+   * bars, so the timeout is generous.
+   *
+   * @param {string} ticker - e.g. 'RELIANCE.NS'
+   * @returns {Promise} Outlook with provenance
+   */
+  getTrendOutlook: async (ticker) => {
+    const response = await api.get(
+      `/api/ml/trend-outlook/${encodeURIComponent(ticker)}`,
+      { timeout: 120000 }
+    );
+    return response.data;
+  },
+
+  /**
+   * Whether a trend classifier is loaded, and its held-out metrics.
+   * `model_loaded: false` before training is expected, not an error.
+   * @returns {Promise} Model info
+   */
+  getTrendModelInfo: async () => {
+    const response = await api.get('/api/ml/trend-model-info');
+    return response.data;
+  },
+
+  /**
+   * Re-read the trend artifact from disk. Use after training.
+   * @returns {Promise} Model info after reload
+   */
+  reloadTrendModel: async () => {
+    const response = await api.post('/api/ml/reload-trend-model');
+    return response.data;
+  },
 };
 
 export default mlService;

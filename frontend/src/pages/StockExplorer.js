@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Card from '../components/common/Card';
@@ -256,6 +257,12 @@ const StockExplorer = () => {
                   <p className="text-secondary-600">
                     {stockInfo.ticker} · {stockInfo.exchange}
                   </p>
+                  <Link
+                    to={`/stock-predictor?ticker=${encodeURIComponent(stockInfo.ticker)}`}
+                    className="inline-block mt-2 text-sm text-primary-700 hover:underline"
+                  >
+                    See the 21-day outlook →
+                  </Link>
                 </div>
                 <div className="text-right">
                   <p className="text-3xl font-bold">

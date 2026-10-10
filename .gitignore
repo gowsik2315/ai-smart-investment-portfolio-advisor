@@ -97,6 +97,10 @@ backend/datasets/dataset_report.txt
 #   python -m ml.prepare_volatility_dataset
 backend/datasets/volatility_*.parquet
 backend/datasets/volatility_report.txt
+# Stock-trend training panel — regenerate with:
+#   python -m ml.prepare_trend_dataset
+backend/datasets/trend_*.parquet
+backend/datasets/trend_report.txt
 
 # Trained ML models
 # Artifacts stay local; the repo tracks the training code and the

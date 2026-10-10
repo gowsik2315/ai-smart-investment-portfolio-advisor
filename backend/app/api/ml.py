@@ -15,16 +15,18 @@ surface:
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.dependencies import get_current_user
-from app.ml.data import PriceDataError, cache_status
+from app.ml.data import InvalidTickerError, PriceDataError, cache_status
 from app.ml.model_registry import list_artifacts
 from app.schemas.ml_prediction import (
     CacheStatusResponse,
     FeatureSnapshotResponse,
     ModelInfoResponse,
+    TrendOutlookResponse,
     VolatilityForecastResponse,
     VolatilityPredictionRequest,
 )
 from app.services.ml_prediction_service import volatility_prediction_service
+from app.services.stock_trend_service import stock_trend_service
 
 
 router = APIRouter()
@@ -128,6 +130,63 @@ async def get_feature_snapshot(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/trend-outlook/{ticker}", response_model=TrendOutlookResponse)
+def get_trend_outlook(
+    ticker: str,
+    current_user_id: int = Depends(get_current_user),
+):
+    """
+    21-day outlook for a stock: current trend, probability of a rise, and
+    the expected price range.
+
+    Check `probability_source` before describing the probability:
+    'ml_predicted' is a model output, while 'historical_base_rate' is the
+    stock's own past frequency of rising and must not be presented as a
+    prediction.
+
+    Plain `def` so FastAPI runs the blocking price fetch in its threadpool.
+    """
+    try:
+        return TrendOutlookResponse(**stock_trend_service.get_outlook(ticker))
+    except InvalidTickerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except PriceDataError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Price data unavailable for {ticker}: {exc}",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/trend-model-info", response_model=ModelInfoResponse)
+def get_trend_model_info(current_user_id: int = Depends(get_current_user)):
+    """
+    Report whether a trend classifier is loaded, and its held-out metrics.
+
+    Before training, `model_loaded` is false: the expected state, not a fault.
+    """
+    return ModelInfoResponse(**stock_trend_service.model_info())
+
+
+@router.post("/reload-trend-model", response_model=ModelInfoResponse)
+def reload_trend_model(current_user_id: int = Depends(get_current_user)):
+    """
+    Re-read the trend artifact from disk after training.
+
+    TODO: gate behind an admin role once the user model has one, as with
+    /reload-model.
+    """
+    result = stock_trend_service.reload_model()
+    return ModelInfoResponse(
+        model_loaded=result["model_loaded"],
+        horizon_days=stock_trend_service.model_info()["horizon_days"],
+        fallback=stock_trend_service.model_info()["fallback"],
+        error=result["error"],
+        model=result["model"],
+    )
 
 
 @router.get("/cache-status", response_model=CacheStatusResponse)

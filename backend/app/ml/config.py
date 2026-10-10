@@ -76,3 +76,18 @@ MAX_PLAUSIBLE_VOLATILITY = 3.00   # 300% annualised
 # Cache lifetime for downloaded history, in hours. Daily bars do not
 # change intraday, so a day is plenty.
 CACHE_TTL_HOURS = 24
+
+
+# ── Trend outlook ────────────────────────────────────────────────────
+# The stock-trend outlook shares the volatility module's feature pipeline
+# and its HORIZON_DAYS, so the probability of a rise and the expected
+# price range always describe the same 21-day window.
+DEFAULT_TREND_MODEL_PATH = MODELS_DIR / "trend_model.joblib"
+
+# Fewest daily bars an outlook will be produced from (~6 months). Below
+# this the 63-day momentum and the base rate are too thin to mean anything.
+TREND_MIN_HISTORY_ROWS = 126
+
+# How many completed 21-day windows the historical base rate averages
+# over (~3 years). Windows overlap, so this is not an independent sample.
+TREND_BASE_RATE_WINDOWS = 756

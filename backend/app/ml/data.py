@@ -14,6 +14,7 @@ Used by training and by inference alike.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -37,9 +38,38 @@ class PriceDataError(RuntimeError):
     """Raised when usable price history cannot be obtained."""
 
 
+class InvalidTickerError(PriceDataError):
+    """Raised for a ticker that is not a plausible Yahoo Finance symbol."""
+
+
+# Yahoo symbols are letters, digits and a few separators: RELIANCE.NS,
+# M&M.NS, BAJAJ-AUTO.NS, ^NSEI, GC=F.
+_TICKER_RE = re.compile(r"^[A-Z0-9^][A-Z0-9.\-&=^]{0,31}$")
+
+
+def validate_ticker(ticker: str) -> str:
+    """
+    Normalise a ticker and reject anything that is not a plausible symbol.
+
+    The ticker becomes part of a cache filename, so this is a security
+    boundary and not just input hygiene. The previous sanitiser replaced
+    '/' and '.' but not '\\' or ':'. On Windows, joining a path with a
+    segment like 'C:\\Users\\x' yields an absolute path outside the cache
+    directory, so a crafted ticker could make the cache write a parquet
+    file anywhere the process can write.
+    """
+    cleaned = (ticker or "").strip().upper()
+    if not _TICKER_RE.match(cleaned):
+        raise InvalidTickerError(
+            f"'{ticker}' is not a valid ticker symbol "
+            f"(letters, digits and . - & = ^ only, up to 32 characters)"
+        )
+    return cleaned
+
+
 def _cache_path(ticker: str, period: str) -> Path:
     """Filesystem-safe cache location for one ticker/period pair."""
-    safe = ticker.replace("^", "INDEX_").replace("/", "_").replace(".", "_")
+    safe = validate_ticker(ticker).replace("^", "INDEX_").replace(".", "_")
     return CACHE_DIR / f"{safe}__{period}.parquet"
 
 

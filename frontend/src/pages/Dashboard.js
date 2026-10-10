@@ -218,6 +218,18 @@ const Dashboard = () => {
             </Card>
           </Link>
 
+          <Link to="/stock-predictor">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
+              <div className="text-center py-4">
+                <div className="w-12 h-12 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <span className="text-2xl">🔭</span>
+                </div>
+                <h3 className="font-semibold text-secondary-900 mb-1">Stock Predictor</h3>
+                <p className="text-sm text-secondary-600">21-day outlook & range</p>
+              </div>
+            </Card>
+          </Link>
+
           <Link to="/diversification">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
               <div className="text-center py-4">
