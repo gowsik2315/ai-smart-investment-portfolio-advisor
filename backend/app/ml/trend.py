@@ -30,12 +30,15 @@ import pandas as pd
 
 from app.ml.config import (
     HORIZON_DAYS,
+    TARGET_UP_COLUMN,
     TRADING_DAYS_PER_YEAR,
     TREND_BASE_RATE_WINDOWS,
 )
-from app.ml.features import _rsi, build_features
+from app.ml.features import _forward_log_return, _rsi, build_features, build_target_up
 
-TREND_TARGET_COLUMN = f"target_up_{HORIZON_DAYS}d"
+# The label and its forward return are defined once, in config and features.
+# Kept under these names because the registry, scripts and tests import them.
+TREND_TARGET_COLUMN = TARGET_UP_COLUMN
 TREND_RETURN_COLUMN = f"fwd_ret_{HORIZON_DAYS}d"
 
 # Two-sided normal quantiles for the 68% and 95% bands
@@ -57,10 +60,10 @@ def build_trend_target(ohlcv: pd.DataFrame, horizon: int = HORIZON_DAYS) -> pd.D
         DataFrame with `TREND_RETURN_COLUMN` and `TREND_TARGET_COLUMN`
         (1.0 when the return is strictly positive, else 0.0).
     """
-    close = ohlcv.sort_index()["close"]
-    forward = np.log(close.shift(-horizon) / close)
-    label = (forward > 0).astype(float).where(forward.notna())
-    return pd.DataFrame({TREND_RETURN_COLUMN: forward, TREND_TARGET_COLUMN: label})
+    return pd.DataFrame({
+        TREND_RETURN_COLUMN: _forward_log_return(ohlcv, horizon),
+        TREND_TARGET_COLUMN: build_target_up(ohlcv, horizon),
+    })
 
 
 def build_trend_training_table(
@@ -80,7 +83,7 @@ def build_trend_training_table(
     labels overlap, so a random split leaks.
     """
     features = build_features(ohlcv, index_ohlcv)
-    target = build_trend_target(ohlcv, horizon)[[TREND_TARGET_COLUMN]]
+    target = build_target_up(ohlcv, horizon).to_frame()
 
     table = features.join(target, how="inner").dropna()
     if ticker is not None:

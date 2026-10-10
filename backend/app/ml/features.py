@@ -29,6 +29,7 @@ from app.ml.config import (
     EMBARGO_DAYS,
     HORIZON_DAYS,
     TARGET_COLUMN,
+    TARGET_UP_COLUMN,
     TRADING_DAYS_PER_YEAR,
 )
 
@@ -255,6 +256,42 @@ def build_target(
     return forward.rename(TARGET_COLUMN)
 
 
+def _forward_log_return(ohlcv: pd.DataFrame, horizon: int = HORIZON_DAYS) -> pd.Series:
+    """
+    Log return from the close on row `t` to the close on row `t + horizon`.
+
+    The single definition of the forward return: `build_target_up` and
+    `app.ml.trend` both derive from it, so they cannot disagree. It looks
+    ahead by `shift(-horizon)`, exactly as `build_target` does, so the last
+    `horizon` rows are NaN because that future has not happened yet.
+    """
+    close = ohlcv.sort_index()["close"]
+    return np.log(close.shift(-horizon) / close)
+
+
+def build_target_up(
+    ohlcv: pd.DataFrame,
+    horizon: int = HORIZON_DAYS,
+) -> pd.Series:
+    """
+    Direction label: 1 if the close `horizon` trading days ahead is above
+    today's close, else 0. NaN where that future close is not yet known.
+
+    Aligned row-for-row with `build_target`. Both use the same `horizon`
+    and the same `shift(-horizon)`, and both need the closes on rows
+    `t .. t + horizon`, so each is NaN on exactly the same final `horizon`
+    rows and defined on exactly the same rows elsewhere. Joining them never
+    costs a row.
+
+    "Above" is strict: a forward return of exactly zero is labelled 0.
+    This is a LABEL, not a feature, and is deliberately not in
+    `FEATURE_NAMES`.
+    """
+    forward = _forward_log_return(ohlcv, horizon)
+    label = (forward > 0).astype(float).where(forward.notna())
+    return label.rename(TARGET_UP_COLUMN)
+
+
 def build_training_table(
     ohlcv: pd.DataFrame,
     index_ohlcv: Optional[pd.DataFrame] = None,
@@ -262,20 +299,28 @@ def build_training_table(
     ticker: Optional[str] = None,
 ) -> pd.DataFrame:
     """
-    Feature matrix joined to the target, with incomplete rows dropped.
+    Feature matrix joined to both targets, with incomplete rows dropped.
 
     Args:
         ticker: when given, added as a `ticker` column so several
             instruments can be concatenated into one panel.
 
     Returns:
-        DataFrame with `FEATURE_NAMES` + TARGET_COLUMN (+ `ticker`),
-        indexed by date, containing only fully-populated rows.
+        DataFrame with `FEATURE_NAMES` + TARGET_COLUMN + TARGET_UP_COLUMN
+        (+ `ticker`), indexed by date, containing only fully-populated rows.
+
+    The two targets are LABELS. Select model inputs with
+    `table[FEATURE_NAMES]`, never by dropping one label and keeping the
+    rest: the other label is a future quantity, and a model fitted on it
+    scores beautifully offline and is worthless live. For a trend
+    classifier that must not even see the volatility label, use
+    `app.ml.trend.build_trend_training_table`.
     """
     features = build_features(ohlcv, index_ohlcv)
     target = build_target(ohlcv, horizon)
+    target_up = build_target_up(ohlcv, horizon)
 
-    table = features.join(target, how="inner")
+    table = features.join(target, how="inner").join(target_up, how="inner")
     table = table.dropna()
 
     if ticker is not None:

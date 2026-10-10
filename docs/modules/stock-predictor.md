@@ -193,6 +193,9 @@ base rate. That is a legitimate result, and worth reporting as one.
 
 - **Features are shared** with the volatility model (`app.ml.features`), so
   training and inference cannot drift apart.
+- **The label is defined once**: `TARGET_UP_COLUMN` in `app/ml/config.py` and
+  `build_target_up` in `app/ml/features.py`, aligned row-for-row with the
+  volatility target. `trend.py` reuses both rather than keeping its own copy.
 - **The forward return is not in the training table.** The label is derived from
   it, so leaving it in would feed the model its own answer.
 - **Split chronologically** with the 21-date embargo. Consecutive labels overlap

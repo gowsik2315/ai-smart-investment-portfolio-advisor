@@ -55,6 +55,11 @@ TRADING_DAYS_PER_YEAR = 252
 
 TARGET_COLUMN = f"target_rv_{HORIZON_DAYS}d"
 
+# Direction label over the same window: 1 if the close HORIZON_DAYS ahead is
+# above today's close, else 0. A LABEL, never a feature: it is not in
+# features.FEATURE_NAMES and must not be used as a model input.
+TARGET_UP_COLUMN = f"target_up_{HORIZON_DAYS}d"
+
 # Because consecutive 21-day targets overlap, a random train/test split
 # leaks the future into training. Splits must be chronological AND leave
 # at least this many days of gap between train and test.

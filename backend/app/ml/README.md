@@ -57,6 +57,20 @@ fitting. That failure is silent — predictions come back plausible and
 wrong — which is why the artifact records its feature list and the loader
 refuses to serve on a mismatch.
 
+The table holds the 21 features plus **two labels**: `TARGET_COLUMN`
+(`target_rv_21d`, next-21-day realised volatility, for the volatility
+model) and `TARGET_UP_COLUMN` (`target_up_21d`, 1 if the close 21 trading
+days ahead is above today's, else 0, for the trend classifier). Both look
+ahead with the same `HORIZON_DAYS` and `shift(-HORIZON_DAYS)`, so they are
+undefined on exactly the same final rows and joining them costs no rows.
+
+**Neither label is a feature.** Select model inputs with
+`table[FEATURE_NAMES]`, never by dropping your own target and keeping the
+rest: the other label is a future quantity, and a model fitted on it looks
+excellent offline and is worthless live. A trend classifier that should not
+even carry the volatility label in its table can use
+`app.ml.trend.build_trend_training_table`.
+
 The 21 features are listed in `features.FEATURE_NAMES`: lagged returns,
 realised volatility at 5/10/21/63 days, the 5-to-21 and 21-to-63
 volatility ratios, Parkinson and Garman-Klass range estimators,

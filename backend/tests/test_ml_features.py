@@ -11,16 +11,37 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.ml.config import HORIZON_DAYS, TARGET_COLUMN, TRADING_DAYS_PER_YEAR
+from app.ml.config import (
+    HORIZON_DAYS,
+    TARGET_COLUMN,
+    TARGET_UP_COLUMN,
+    TRADING_DAYS_PER_YEAR,
+)
 from app.ml.features import (
     FEATURE_NAMES,
     MAX_LOOKBACK,
     build_features,
     build_target,
+    build_target_up,
     build_training_table,
     chronological_split,
     latest_feature_row,
 )
+
+
+def make_frame(close=None):
+    """Deterministic OHLCV around a given close path (flat 60 days by default)."""
+    close = np.full(60, 100.0) if close is None else np.asarray(close, dtype=float)
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close * 1.01,
+            "low": close * 0.99,
+            "close": close,
+            "volume": np.full(len(close), 1_000_000),
+        },
+        index=pd.DatetimeIndex(pd.bdate_range("2021-01-01", periods=len(close)), name="date"),
+    )
 
 
 class TestFeatureMatrix:
@@ -108,6 +129,100 @@ class TestTargetHasNoLookahead:
         assert not np.allclose(both.iloc[:, 0], both.iloc[:, 1])
 
 
+class TestDirectionTarget:
+    """`target_up_21d`: did the close rise over the next HORIZON trading days?"""
+
+    def test_column_name_and_its_tie_to_the_horizon_constant(self):
+        assert TARGET_UP_COLUMN == "target_up_21d"
+        assert TARGET_UP_COLUMN == f"target_up_{HORIZON_DAYS}d"
+        assert build_target_up(make_frame()).name == TARGET_UP_COLUMN
+
+    def test_label_equals_the_sign_of_the_forward_log_return(self, ohlcv):
+        """Computed independently here from the raw closes."""
+        label = build_target_up(ohlcv)
+        close = ohlcv['close'].to_numpy()
+
+        for t in [0, 50, 300, 500, 700, len(close) - HORIZON_DAYS - 1]:
+            expected = 1.0 if np.log(close[t + HORIZON_DAYS] / close[t]) > 0 else 0.0
+            assert label.iloc[t] == expected
+
+    def test_final_rows_are_na_because_the_future_is_unknown(self, ohlcv):
+        label = build_target_up(ohlcv)
+        assert label.tail(HORIZON_DAYS).isna().all()
+        assert label.iloc[:-HORIZON_DAYS].notna().all()
+
+    def test_values_are_only_zero_one_or_nan(self, ohlcv):
+        assert set(build_target_up(ohlcv).dropna().unique()) <= {0.0, 1.0}
+
+    def test_a_forward_return_of_exactly_zero_is_labelled_down(self):
+        """'Above 0' is strict."""
+        flat = make_frame(close=np.full(60, 100.0))
+        label = build_target_up(flat).dropna()
+        assert len(label) == 60 - HORIZON_DAYS
+        assert (label == 0.0).all()
+
+    def test_a_rising_series_is_always_up_and_a_falling_one_always_down(self):
+        up = build_target_up(make_frame(close=100 * np.exp(0.002 * np.arange(80)))).dropna()
+        down = build_target_up(make_frame(close=100 * np.exp(-0.002 * np.arange(80)))).dropna()
+        assert (up == 1.0).all()
+        assert (down == 0.0).all()
+
+    def test_label_depends_only_on_the_window_it_covers(self, ohlcv):
+        """Removing everything after t + HORIZON must not change the label at t."""
+        t = 400
+        full = build_target_up(ohlcv).iloc[t]
+        truncated = build_target_up(ohlcv.iloc[: t + HORIZON_DAYS + 1]).iloc[t]
+        assert full == truncated
+
+
+class TestDirectionTargetIsAlignedWithVolatilityTarget:
+    """Both targets look ahead the same HORIZON with the same shift, so they
+    must be undefined on the same rows and defined on the same rows."""
+
+    def test_same_rows_are_known_and_unknown(self, ohlcv):
+        rv = build_target(ohlcv)
+        up = build_target_up(ohlcv)
+
+        assert rv.index.equals(up.index)
+        assert rv.isna().equals(up.isna())
+
+    @pytest.mark.parametrize("horizon", [5, 10, 21, 40])
+    def test_alignment_holds_at_any_horizon(self, ohlcv, horizon):
+        rv = build_target(ohlcv, horizon)
+        up = build_target_up(ohlcv, horizon)
+
+        assert rv.isna().equals(up.isna())
+        assert up.tail(horizon).isna().all()
+
+    def test_both_cover_the_same_closes_on_every_row(self, ohlcv):
+        """Row t's volatility uses returns t+1..t+H, i.e. closes t..t+H; the
+        direction compares close t+H with close t. Same span, same row."""
+        t = 450
+        close = ohlcv['close']
+        window = close.iloc[t: t + HORIZON_DAYS + 1]
+
+        manual_rv = np.log(window / window.shift(1)).std() * np.sqrt(TRADING_DAYS_PER_YEAR)
+        manual_up = 1.0 if window.iloc[-1] > window.iloc[0] else 0.0
+
+        assert build_target(ohlcv).iloc[t] == pytest.approx(manual_rv, rel=1e-9)
+        assert build_target_up(ohlcv).iloc[t] == manual_up
+
+
+class TestDirectionTargetIsALabelNotAFeature:
+
+    def test_not_in_feature_names(self):
+        assert TARGET_UP_COLUMN not in FEATURE_NAMES
+        assert TARGET_COLUMN not in FEATURE_NAMES
+
+    def test_feature_set_is_unchanged_at_21(self):
+        assert len(FEATURE_NAMES) == 21
+
+    def test_feature_matrix_does_not_contain_it(self, ohlcv, index_ohlcv):
+        features = build_features(ohlcv, index_ohlcv)
+        assert TARGET_UP_COLUMN not in features.columns
+        assert list(features.columns) == FEATURE_NAMES
+
+
 class TestFeaturesHaveNoLookahead:
 
     def test_feature_row_unchanged_when_future_is_removed(self, ohlcv, index_ohlcv):
@@ -153,7 +268,32 @@ class TestTrainingTable:
         for name in FEATURE_NAMES:
             assert name in table.columns
         assert TARGET_COLUMN in table.columns
+        assert TARGET_UP_COLUMN in table.columns
         assert not table.isna().any().any()
+
+    def test_column_order_is_features_then_both_labels(self, ohlcv, index_ohlcv):
+        table = build_training_table(ohlcv, index_ohlcv)
+        assert list(table.columns) == FEATURE_NAMES + [TARGET_COLUMN, TARGET_UP_COLUMN]
+
+    def test_adding_the_direction_label_costs_no_rows(self, ohlcv, index_ohlcv):
+        """The targets are aligned, so joining the second one drops nothing."""
+        features = build_features(ohlcv, index_ohlcv)
+        volatility_only = features.join(build_target(ohlcv), how="inner").dropna()
+
+        assert len(build_training_table(ohlcv, index_ohlcv)) == len(volatility_only)
+
+    def test_direction_label_in_the_table_matches_the_closes(self, ohlcv, index_ohlcv):
+        table = build_training_table(ohlcv, index_ohlcv)
+        close = ohlcv['close']
+        expected = (np.log(close.shift(-HORIZON_DAYS) / close) > 0).astype(float).reindex(table.index)
+
+        assert table[TARGET_UP_COLUMN].equals(expected.rename(TARGET_UP_COLUMN))
+        assert set(table[TARGET_UP_COLUMN].unique()) <= {0.0, 1.0}
+
+    def test_selecting_features_by_name_never_picks_up_a_label(self, ohlcv, index_ohlcv):
+        X = build_training_table(ohlcv, index_ohlcv)[FEATURE_NAMES]
+        assert TARGET_UP_COLUMN not in X.columns
+        assert TARGET_COLUMN not in X.columns
 
     def test_ticker_column_added_when_requested(self, ohlcv, index_ohlcv):
         table = build_training_table(ohlcv, index_ohlcv, ticker='TEST.NS')

@@ -24,7 +24,7 @@ Built as a personal/academic project, not deployed.
 - **LLM:** Ollama running `qwen2.5:3b` locally (CPU, ~10 tokens/sec)
 - **Market data:** Yahoo Finance via `yfinance` — no API key needed
 - **ML:** scikit-learn, with `arch`/`statsmodels` for baselines
-- 58 API operations, 15 frontend pages, 268 passing tests
+- 58 API operations, 15 frontend pages, 288 passing tests
 
 ## The ten modules
 
@@ -57,7 +57,7 @@ Built as a personal/academic project, not deployed.
 ## Current state
 
 **Working:** all ten modules, end to end, frontend and backend. Auth
-enforced on every data endpoint, per-user data scoping, 268 tests,
+enforced on every data endpoint, per-user data scoping, 288 tests,
 Alembic migrations, pushed to a private GitHub repo.
 
 **Not done — the single open item:**
