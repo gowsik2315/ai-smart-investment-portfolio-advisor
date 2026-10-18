@@ -12,7 +12,7 @@ and the contract they must satisfy — see
 
 | File | Purpose |
 |---|---|
-| `volatility_model.joblib` | The artifact the API serves. Created by `app.ml.model_registry.save_model()`. |
+| `volatility_model.joblib` | The artifact the API serves. Created by `app.ml.model_registry.save_model()`, normally via `scripts/train_volatility_model.py`. |
 | `trend_model.joblib` | The stock-trend classifier the Stock Predictor serves. Created by `app.ml.trend_registry.save_trend_model()`. A different artifact type: a volatility artifact is refused here. |
 
 Additional artifacts can sit alongside them under any name; only

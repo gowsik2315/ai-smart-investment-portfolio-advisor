@@ -88,11 +88,17 @@ Never shuffle. And note the embargo: consecutive 21-day targets overlap,
 so the target on the last training row is built from returns that extend
 21 days into the test period. Splitting without a gap lets the model see
 part of its own test window during fitting and inflates every metric.
-`chronological_split` drops `EMBARGO_DAYS` rows between the two halves.
+`chronological_split` drops `EMBARGO_DAYS` distinct trading DATES between the
+two halves (21 dates x 10 tickers = 210 rows on the shipped panel), not rows.
+The distinction is the whole point on a pooled panel: a 21-row embargo spans
+only about two dates there (measured: 1), and the overlapping targets leak.
 
-For walk-forward validation inside the training half, use
-`sklearn.model_selection.TimeSeriesSplit` — and keep the same embargo in
-mind there too.
+For walk-forward validation inside the training half, build the folds by
+DATE with the same embargo. Do not use
+`sklearn.model_selection.TimeSeriesSplit` on the pooled rows: it cuts by row
+position, so it splits a single date across train and validation and leaves
+the same too-small gap. `scripts/train_volatility_model.py` shows the
+date-based folds and verifies every gap.
 
 ### 3. Beat the baselines, and report them
 
@@ -166,6 +172,75 @@ POST /api/ml/reload-model
 ```
 
 ---
+
+## Training script and first results
+
+`scripts/train_volatility_model.py` implements this contract end to end:
+
+```bash
+cd backend
+venv/Scripts/python.exe scripts/train_volatility_model.py --dry-run --garch   # evaluate, save nothing
+venv/Scripts/python.exe scripts/train_volatility_model.py --garch             # save if accepted
+```
+
+- Data and features come only from `app.ml`. The split's embargo is **measured
+  in distinct trading dates** and re-done by date if it falls short.
+- Tuning uses walk-forward folds built **by date** with the same 21-date
+  embargo, selected on QLIKE. The test half is not touched until a model is
+  selected.
+- Candidates (Ridge, HistGradientBoosting, RandomForest) are fitted on
+  `log(volatility)` inside `TransformedTargetRegressor(np.log, np.exp)`, so a
+  prediction is annualised volatility and cannot be negative. Nothing defined
+  in the script is pickled.
+- `--model auto` applies a **one-standard-error rule**: the simplest family
+  whose cross-validated QLIKE is within one standard error of the best.
+- It saves, through `save_model`, only if the model beats naive persistence on
+  both RMSE and QLIKE. `--dry-run` never saves; `--force-save` overrides.
+  A mismatch between the training environment and `requirements.txt` also
+  blocks saving, because the artifact is a pickle.
+
+### First run (saved as `ridge-log-20261011`)
+
+Panel: 21,990 rows, 10 tickers, 2017-10-16 to 2026-09-08. Train ends
+2024-10-30, test starts 2024-12-03, with 21 distinct trading dates between
+(210 rows dropped). Test scores, 4,390 rows, every forecast scored on the same rows:
+
+| | RMSE | MAE | QLIKE | R2 |
+|---|---|---|---|---|
+| **ridge, alpha=30000** | 0.0676 | 0.0532 | 0.1949 | 0.190 |
+| HAR | 0.0706 | 0.0563 | 0.2036 | 0.118 |
+| GARCH(1,1) | 0.0792 | 0.0652 | 0.2340 | -0.111 |
+| naive persistence | 0.0823 | 0.0616 | 0.3638 | -0.199 |
+
+Date-block bootstrap on the test half (blocks of 21 dates, 4,000 resamples):
+
+| Comparison | Metric | Improvement | 95% interval |
+|---|---|---|---|
+| model vs naive | QLIKE | +46.4% | +22.3% to +62.4% |
+| model vs naive | RMSE | +17.8% | +8.4% to +25.9% |
+| model vs HAR | QLIKE | +4.3% | **-2.8% to +10.8%** |
+| model vs HAR | RMSE | +4.2% | **-0.2% to +8.7%** |
+
+**What to claim:** the model clearly beats naive persistence. It beats HAR in
+the point estimate, but the difference is not statistically distinguishable
+from zero, so "no worse than HAR, and better than naive" is the honest wording.
+
+Caveats from the diagnostics:
+
+- **Forecasts are compressed.** Predictions span 0.18-0.31 while realised
+  volatility spans 0.08-0.56. Across prediction deciles the actual value rises
+  from 0.157 to 0.297 while the prediction rises only from 0.191 to 0.262, so
+  calm periods are over-forecast (lowest decile actual/predicted 0.82) and the
+  highest decile is under-forecast (1.14). The under-forecast side is the one
+  that matters for a risk tool.
+- **The ridge alpha was first clipped by the original grid** (best at the
+  edge of 10,000). Widening it to 300,000 put the optimum at an interior
+  30,000, so that run is the one reported.
+- **The three families were within noise of each other** in cross-validation
+  (QLIKE 0.184, 0.186, 0.191 against a fold-to-fold spread of about 0.05), which
+  is why the simplest was chosen.
+- **One test window, one regime** (Dec 2024 to Sep 2026).
+- Model files are git-ignored; reproduce with the script.
 
 ## How the app consumes the forecast
 

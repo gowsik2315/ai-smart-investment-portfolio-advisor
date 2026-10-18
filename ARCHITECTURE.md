@@ -552,12 +552,12 @@ Update UI with Results
 - ✅ AI-generated explanations (Ollama), cached per record
 - ✅ ML integration layer: shared feature pipeline, artifact contract,
      prediction service with fallback, `/api/ml/*` endpoints
-- 🔄 Volatility model training and evaluation against the naive, HAR and
-     GARCH(1,1) baselines — the remaining step
+- ✅ Volatility model trained and evaluated against naive persistence, HAR and
+     GARCH(1,1) (`scripts/train_volatility_model.py`); the artifact is local
 - ⬜ Real-time data, performance tracking, notifications
 
 ### Phase 4: Production 🔄
-- ✅ Automated tests (288, pytest)
+- ✅ Automated tests (336, pytest)
 - ✅ Alembic migrations
 - ✅ Per-user authorization on every data endpoint
 - ⬜ Security audit, PostgreSQL migration, deployment, monitoring

@@ -24,7 +24,7 @@ Built as a personal/academic project, not deployed.
 - **LLM:** Ollama running `qwen2.5:3b` locally (CPU, ~10 tokens/sec)
 - **Market data:** Yahoo Finance via `yfinance` — no API key needed
 - **ML:** scikit-learn, with `arch`/`statsmodels` for baselines
-- 58 API operations, 15 frontend pages, 288 passing tests
+- 58 API operations, 15 frontend pages, 336 passing tests
 
 ## The ten modules
 
@@ -57,16 +57,19 @@ Built as a personal/academic project, not deployed.
 ## Current state
 
 **Working:** all ten modules, end to end, frontend and backend. Auth
-enforced on every data endpoint, per-user data scoping, 288 tests,
+enforced on every data endpoint, per-user data scoping, 336 tests,
 Alembic migrations, pushed to a private GitHub repo.
 
-**Not done — the single open item:**
-The volatility model is **not trained yet**. The entire integration path
-exists and is tested: a shared feature pipeline (21 features from price
-history), a saved-model contract, an API endpoint, and a fallback. Until
-a model is saved, the app returns *trailing historical volatility* and
-labels it `historical_fallback` so it is never passed off as a
-prediction. Everything still works; it just isn't ML yet.
+**Trained locally:** the volatility model (a ridge regression on
+log-volatility, `scripts/train_volatility_model.py`). It clearly beats naive
+persistence (RMSE 17.8% lower, QLIKE 46.4% lower) but is **not statistically
+distinguishable from the HAR baseline** (QLIKE 4.3% lower, 95% interval -2.8%
+to +10.8%), and its forecasts are compressed toward the average (predicted
+18-31% against an actual 8-56%). Model files are git-ignored, so a fresh clone
+falls back to `historical_fallback` until the script is run.
+
+**Not done:** the Stock Predictor's trend classifier. The page labels the
+base rate "Not a prediction" until one is trained.
 
 **Also outstanding:** SQLite → PostgreSQL, real deployment (AWS),
 `SECRET_KEY` is still a placeholder.
@@ -102,9 +105,10 @@ prediction. Everything still works; it just isn't ML yet.
 
 ## Open questions to decide
 
-1. **Which models to train** — for volatility (Ridge/HAR-style linear,
-   Random Forest, gradient boosting; must beat the baselines) and for the
-   trend classifier (must beat the historical base rate on Brier skill).
+1. **The trend classifier** still has to be trained and must beat the
+   historical base rate on Brier skill. The volatility model is trained: a
+   one-standard-error rule chose ridge over RandomForest and HistGradientBoosting
+   because the three were within cross-validation noise of each other.
 2. **Whether to add any further ML.** Three candidates discussed:
    - *Covariance / correlation estimation* — measure diversification
      from how holdings actually move together, rather than from sector

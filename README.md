@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-green.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-288%20passing-brightgreen.svg)](backend/tests/)
+[![Tests](https://img.shields.io/badge/tests-336%20passing-brightgreen.svg)](backend/tests/)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -229,11 +229,13 @@ AI Smart Investment Portfolio Advisor/
 │   │
 │   ├── alembic/                      # Database migrations
 │   │   └── versions/
-│   ├── tests/                        # pytest suite (288 tests)
+│   ├── tests/                        # pytest suite (336 tests)
 │   ├── ml/                           # Offline dataset scripts
 │   │   ├── generate_investor_dataset.py    # Synthetic (unused by app)
 │   │   ├── prepare_volatility_dataset.py   # Real NSE price panel
 │   │   └── prepare_trend_dataset.py        # Up/down labels, same features
+│   ├── scripts/                      # Training entry points
+│   │   └── train_volatility_model.py # Train, evaluate, conditionally save
 │   ├── models/                       # Trained artifacts (gitignored)
 │   ├── data_cache/                   # Parquet price cache (gitignored)
 │   ├── datasets/                     # Generated datasets (gitignored)
@@ -343,6 +345,12 @@ Training happens offline and the artifact is loaded at runtime. The full
 contract — feature parity, the chronological split with its embargo, the
 baselines, and how to save a model the API will accept — is in
 **[backend/app/ml/README.md](backend/app/ml/README.md)**.
+
+To train the volatility model, run `python scripts/train_volatility_model.py`
+from `backend/` (add `--dry-run` to evaluate without saving, `--garch` to
+include the slow GARCH baseline). It saves only if the model beats naive
+persistence on both RMSE and QLIKE, and it verifies that the date-based
+embargo really is 21 trading dates rather than trusting it.
 
 ```bash
 POST /api/ml/predict-volatility   {"ticker": "RELIANCE.NS"}
@@ -454,7 +462,7 @@ User Input → React Frontend → FastAPI Backend → Services Layer
 ### Automated tests
 ```bash
 cd backend
-pytest                 # 288 tests
+pytest                 # 336 tests
 ```
 
 Covers the Monte Carlo simulator's maths (including closed-form drift
@@ -470,6 +478,7 @@ Each analytics page has a **Generate Sample Data** button to populate it.
 cd backend
 python ml/generate_investor_dataset.py       # 50,000 synthetic investor profiles
 python -m ml.prepare_volatility_dataset      # real NSE price panel for volatility training
+python scripts/train_volatility_model.py --dry-run   # train + evaluate the volatility model, saves nothing
 ```
 
 These are two unrelated datasets - see **Machine Learning** below.
@@ -505,10 +514,16 @@ These are two unrelated datasets - see **Machine Learning** below.
    the data is not licensed for commercial redistribution. History is
    cached to `backend/data_cache/`, and the loader serves a stale cache
    rather than failing.
-2. **No volatility model is shipped.** `/api/ml/predict-volatility`
-   returns trailing realised volatility labelled
-   `source: "historical_fallback"` until one is trained. See the
-   [ML integration contract](backend/app/ml/README.md).
+2. **The volatility model is trained locally and not committed.** Model
+   files are git-ignored, so a fresh clone has none and
+   `/api/ml/predict-volatility` returns trailing realised volatility labelled
+   `source: "historical_fallback"` until you run
+   `python scripts/train_volatility_model.py`. The first run (a ridge
+   regression on log-volatility) cut error against naive persistence clearly
+   (RMSE 17.8% lower, QLIKE 46.4% lower) but was **not statistically
+   distinguishable from the HAR baseline** (QLIKE 4.3% lower, 95% interval
+   -2.8% to +10.8%), and its forecasts are compressed toward the average.
+   See the [ML integration contract](backend/app/ml/README.md).
 3. **AI model**: `qwen2.5:3b` is lightweight and noticeably weaker than
    7b/14b. On CPU it generates ~10 tokens/sec, so a first explanation
    takes 90-120s; results are cached per record afterwards.
@@ -551,9 +566,11 @@ These are two unrelated datasets - see **Machine Learning** below.
 - [x] ML integration seam — feature pipeline, artifact contract,
       prediction service with fallback, `/api/ml/*` endpoints
 - [x] Geometric Brownian motion Monte Carlo with VaR/CVaR
-- [x] Alembic migrations, 288 automated tests
-- [ ] **Train and evaluate the volatility model** against the naive,
-      HAR and GARCH(1,1) baselines — the remaining step
+- [x] Alembic migrations, 336 automated tests
+- [x] **Volatility model trained and evaluated** against naive persistence,
+      HAR and GARCH(1,1) (`scripts/train_volatility_model.py`); the artifact
+      is local, not committed
+- [ ] Train the Stock Predictor's trend classifier
 - [ ] Advanced portfolio optimization algorithms
 - [ ] Tax optimization strategies
 - [ ] Multi-currency support
@@ -633,7 +650,7 @@ For setup issues or questions:
 - **Backend endpoints**: 58 operations across 47 paths
 - **Frontend pages**: 15
 - **Database tables**: 10 (+ Alembic migrations)
-- **Automated tests**: 288
+- **Automated tests**: 336
 - **AI explanation endpoints**: 8 (`/api/*/explain`)
 - **Volatility features**: 21, over a 10-ticker NSE panel
 - **Synthetic investor dataset**: 50,000 rows (unused by the app — see
@@ -645,7 +662,7 @@ For setup issues or questions:
 
 **Version**: 1.0.0  
 **Last Updated**: October 2026  
-**Status**: Functional; the volatility model is not yet trained
+**Status**: Functional; the volatility model is trained locally (not committed), the trend classifier is not yet trained
 
 ---
 

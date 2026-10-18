@@ -9,7 +9,7 @@ and login.
 
 ```bash
 cd backend
-pytest                              # 288 tests
+pytest                              # 336 tests
 pytest tests/test_security.py -v    # one module, verbose
 pytest -k volatility                # by keyword
 ```
@@ -26,6 +26,7 @@ the suite flaky for reasons unrelated to the code.
 | `test_ml_evaluation.py` | RMSE/MAE/QLIKE, including QLIKE's asymmetry, plus the naive and HAR baselines |
 | `test_ml_trend.py` | The stock-trend module: label correctness and leakage, the descriptive trend signals, base rate, range maths against the closed form, Brier-skill scoring, the classifier artifact contract (including refusing a volatility artifact), and the service fallbacks |
 | `test_ml_explain.py` | The Stock Predictor's AI explanation: the prompt's wording rules per situation, the output guard (advice, certainty, negated disclaimers, the appended base-rate caveat), and the endpoint's caching and failure behaviour with Ollama stubbed |
+| `test_train_volatility_script.py` | The training script's guards: the embargo measured in dates (including that a row-based split really leaks and the script repairs it), date-based folds, the one-standard-error selection rule, the both-metrics acceptance rule, and that every candidate predicts positive volatility and pickles without referencing the script |
 | `test_ml_data.py` | Ticker validation: hostile symbols such as drive-letter paths are rejected before they can reach a cache filename |
 | `test_security.py` | bcrypt hashing, the 72-byte input limit measured in bytes, JWT round-trips, forged-token rejection |
 
