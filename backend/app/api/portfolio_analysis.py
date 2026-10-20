@@ -104,8 +104,11 @@ async def get_latest_analysis(
 
 
 @router.post("/generate-sample-data")
-async def generate_sample_data(request: GenerateSampleDataRequest):
-    """Generate sample portfolio data"""
+async def generate_sample_data(
+    request: GenerateSampleDataRequest,
+    current_user_id: int = Depends(get_current_user),
+):
+    """Generate sample portfolio data (authenticated: it is a user tool, not a public one)"""
     sample_data = PortfolioRiskAnalyzer.generate_sample_portfolio_data(
         initial_value=request.initial_value,
         days=request.days,

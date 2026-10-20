@@ -397,7 +397,7 @@ const SIPPlanner = () => {
                       <div className="text-center">
                         <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-4"></div>
                         <p className="text-secondary-600">🤖 Generating AI insights...</p>
-                        <p className="text-xs text-secondary-500 mt-2">This may take 10-15 seconds</p>
+                        <p className="text-xs text-secondary-500 mt-2">This may take 30-60 seconds on CPU</p>
                       </div>
                     </div>
                   </Card>

@@ -110,3 +110,37 @@ class TestTokens:
         from jose import jwt
         forged = jwt.encode({"sub": "1", "type": "access"}, "a-different-key", algorithm="HS256")
         assert decode_token(forged) is None
+
+
+class TestNoPlainTextFallback:
+    """
+    Verification must have exactly one path: bcrypt.
+
+    An earlier version compared the strings directly when bcrypt raised,
+    to support dev accounts predating hashing. That turned any non-hash
+    value written into `password_hash` into a working password.
+    """
+
+    def test_a_plaintext_stored_value_never_authenticates(self):
+        from app.core.security import verify_password
+
+        assert verify_password("hunter2", "hunter2") is False
+
+    def test_an_empty_stored_hash_never_authenticates(self):
+        from app.core.security import verify_password
+
+        assert verify_password("", "") is False
+        assert verify_password("anything", "") is False
+
+    def test_a_corrupt_hash_fails_closed_rather_than_raising(self):
+        from app.core.security import verify_password
+
+        for corrupt in ("not-a-hash", "$2b$12$tooshort", "$$$$", "null"):
+            assert verify_password("password", corrupt) is False
+
+    def test_a_real_bcrypt_hash_still_verifies(self):
+        from app.core.security import get_password_hash, verify_password
+
+        hashed = get_password_hash("Correct@123")
+        assert verify_password("Correct@123", hashed) is True
+        assert verify_password("Wrong@123", hashed) is False

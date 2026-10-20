@@ -47,6 +47,25 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("Starting application...")
+
+    # The placeholder secret is published in .env.example, so tokens
+    # signed with it can be forged by anyone. Refuse to serve with it
+    # outside development rather than silently issuing forgeable tokens.
+    if settings.is_placeholder_secret:
+        if settings.DEBUG:
+            logger.warning(
+                "SECRET_KEY is the placeholder from .env.example. JWTs signed "
+                "with it can be forged. Set a real one before deploying: "
+                "python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        else:
+            raise RuntimeError(
+                "SECRET_KEY is still the placeholder from .env.example and DEBUG "
+                "is off. Refusing to start: tokens signed with a published key "
+                "can be forged by anyone. Generate one with "
+                "python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+
     logger.info("Creating database tables...")
     Base.metadata.create_all(bind=engine, checkfirst=True)
     logger.info("Database tables ready.")

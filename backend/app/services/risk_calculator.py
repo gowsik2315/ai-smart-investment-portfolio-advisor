@@ -218,7 +218,8 @@ class RiskCalculator:
         """Generate detailed explanation of risk calculation"""
         
         savings_rate = (profile.monthly_savings / profile.monthly_income * 100) if profile.monthly_income > 0 else 0
-        
+        allocation = RiskCalculator._allocation_for(risk_score)
+
         explanation = f"""Your risk profile has been calculated as {investor_type} with a score of {risk_score}/100.
 
 Factors considered:
@@ -229,30 +230,26 @@ Factors considered:
 • Risk Tolerance ({profile.risk_tolerance}): Score {tolerance_score:.1f}/100 - Your stated preference is the key factor
 
 Recommended Investment Allocation:
-• Equity: {RiskCalculator._get_equity_allocation(investor_type)}%
-• Debt: {RiskCalculator._get_debt_allocation(investor_type)}%
-• Gold: 10%
+• Stocks: {allocation['stocks_percent']}%
+• Mutual Funds: {allocation['mutual_funds_percent']}%
+• Gold: {allocation['gold_percent']}%
+• Emergency Fund: {allocation['emergency_percent']}%
 
 This profile will help guide your investment decisions and portfolio allocation."""
         
         return explanation
     
     @staticmethod
-    def _get_equity_allocation(investor_type: str) -> int:
-        """Get recommended equity allocation based on investor type"""
-        allocations = {
-            "Conservative": 30,
-            "Moderate": 50,
-            "Aggressive": 70
-        }
-        return allocations.get(investor_type, 50)
-    
-    @staticmethod
-    def _get_debt_allocation(investor_type: str) -> int:
-        """Get recommended debt allocation based on investor type"""
-        allocations = {
-            "Conservative": 60,
-            "Moderate": 40,
-            "Aggressive": 20
-        }
-        return allocations.get(investor_type, 40)
+    def _allocation_for(risk_score: float) -> dict:
+        """
+        The allocation this score implies.
+
+        Delegates to RecommendationEngine so the Risk page and the
+        Recommendation page cannot disagree. They previously did: this
+        module carried its own three-tier table (Aggressive = 70/20/10)
+        while the engine computed a score-proportional split, so one
+        user saw two different "recommended" allocations.
+        """
+        from app.services.recommendation_engine import RecommendationEngine
+
+        return RecommendationEngine._calculate_dynamic_allocation(risk_score)

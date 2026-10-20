@@ -14,17 +14,23 @@ from app.core.config import settings
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify a plain-text password against a bcrypt hash.
-    Handles legacy plain-text passwords stored before hashing was enabled.
+
+    A malformed or non-bcrypt stored value is a verification FAILURE, not
+    a reason to try something else. An earlier version fell back to
+    comparing the two strings directly, to carry over dev accounts
+    created before hashing existed. No such account remains, and the
+    fallback turned any non-hash written into `password_hash` into a
+    working password — so it is gone. Authentication has exactly one
+    path now.
     """
-    # Attempt bcrypt verification first
     try:
         password_bytes = plain_password.encode("utf-8")
         hash_bytes = hashed_password.encode("utf-8")
         return bcrypt.checkpw(password_bytes, hash_bytes)
     except Exception:
-        # Fallback: plain-text comparison for accounts created before
-        # hashing was enabled (migrating old dev accounts)
-        return plain_password == hashed_password
+        # Corrupt hash, wrong format, or an over-long input: all mean
+        # "cannot verify", which is the same as "no".
+        return False
 
 
 # bcrypt truncates/rejects beyond 72 bytes of input

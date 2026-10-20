@@ -3,7 +3,9 @@ Ollama Health Check API
 Endpoint for checking Ollama service availability
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.core.dependencies import get_current_user
 from app.services.ollama_service import ollama_service
 
 router = APIRouter()
@@ -26,7 +28,7 @@ async def check_ollama_health():
 
 
 @router.get("/test")
-async def test_ollama_generation():
+async def test_ollama_generation(current_user_id: int = Depends(get_current_user)):
     """
     Test Ollama generation with a simple prompt
     

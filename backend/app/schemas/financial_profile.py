@@ -17,6 +17,16 @@ class FinancialProfileBase(BaseModel):
     risk_tolerance: str = Field(..., description="Risk tolerance level")
     financial_goal: str = Field(..., description="Primary financial goal")
     
+    @validator('monthly_savings')
+    def savings_cannot_exceed_income(cls, v, values):
+        # A savings rate above 100% is not a tight budget, it is a typo.
+        # The risk score weights the savings rate at 15%, so letting it
+        # through quietly inflates the user's risk capacity.
+        income = values.get('monthly_income')
+        if income is not None and v > income:
+            raise ValueError('Monthly savings cannot exceed monthly income')
+        return v
+
     @validator('investment_horizon')
     def validate_investment_horizon(cls, v):
         allowed_horizons = ['1-3 Years', '3-5 Years', '5-10 Years', '10+ Years']

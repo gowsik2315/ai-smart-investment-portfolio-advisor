@@ -116,7 +116,10 @@ async def get_analysis_history(
 
 
 @router.post("/generate-sample-holdings")
-async def generate_sample_holdings(request: GenerateSampleHoldingsRequest):
+async def generate_sample_holdings(
+    request: GenerateSampleHoldingsRequest,
+    current_user_id: int = Depends(get_current_user),
+):
     """Generate sample holdings for testing"""
     holdings = DiversificationAnalyzer.generate_sample_holdings(
         portfolio_value=request.portfolio_value,

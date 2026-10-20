@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./investment_advisor.db"
     
     # Security
+    #
+    # The default below is a PLACEHOLDER and is treated as one: anything
+    # starting with "your-secret-key" is rejected when DEBUG is off, so a
+    # deployment cannot quietly sign real tokens with a value published
+    # in .env.example. See `is_placeholder_secret`.
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
@@ -45,7 +50,21 @@ class Settings(BaseSettings):
     def allowed_origins_list(self) -> List[str]:
         """Parse ALLOWED_ORIGINS string into list"""
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
-    
+
+    @property
+    def is_placeholder_secret(self) -> bool:
+        """
+        True when SECRET_KEY is still the shipped placeholder.
+
+        The placeholder is published in .env.example, so anyone could
+        forge a token signed with it. Startup checks this: a warning in
+        development, a refusal to start in production.
+        """
+        return (
+            self.SECRET_KEY.startswith("your-secret-key")
+            or len(self.SECRET_KEY) < 32
+        )
+
     class Config:
         env_file = ".env"
         case_sensitive = True
