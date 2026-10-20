@@ -130,13 +130,14 @@ Finally, we thank our families and friends for their patience and encouragement 
 
 Retail participation in Indian equity and mutual-fund markets has grown rapidly, but most new investors decide without understanding their own risk capacity, the risk of the portfolio they hold, or what a range of future outcomes looks like. Human advice is expensive, commercial robo-advisors are opaque about how they reach a recommendation, and generic calculators give one deterministic number that hides uncertainty. This project presents the **AI Smart Investment Portfolio Advisor (FinIntelAI)**, a full-stack web platform that turns an investor's financial profile into a quantified risk score, an asset allocation, portfolio risk analytics and probabilistic projections. Every result comes with a plain-language explanation produced by a locally hosted large language model.
 
-The system is built on a **FastAPI** backend (Python 3.13, SQLAlchemy 2.0, Alembic) and a **React 18** frontend with Tailwind CSS and Recharts. It exposes **58 REST operations** across **12 modules**:
+The system is built on a **FastAPI** backend (Python 3.13, SQLAlchemy 2.0, Alembic) and a **React 18** frontend with Tailwind CSS and Recharts. It exposes **69 REST operations** across **13 modules**:
 - authentication (JWT, bcrypt)
 - financial profiling
 - weighted multi-factor risk scoring
 - score-proportional asset allocation
-- portfolio risk analytics (annualised volatility, Sharpe ratio, maximum drawdown)
-- diversification analysis (sector and asset-class concentration with a Herfindahl–Hirschman index)
+- portfolio tracking (a transaction ledger from which holdings, cost basis and profit are derived by average-cost accounting)
+- portfolio risk analytics (annualised volatility, Sharpe ratio, maximum drawdown) computed from the user's real holdings
+- diversification analysis (sector and asset-class concentration with a Herfindahl–Hirschman index) over those same holdings
 - Monte Carlo simulation (geometric Brownian motion with Itô-corrected drift, VaR and CVaR)
 - SIP planning
 - live market data from Yahoo Finance
@@ -148,7 +149,11 @@ The LLM runs entirely on the user's machine, so no financial data leaves it. Exp
 
 The machine-learning component forecasts **21-trading-day forward realised volatility** from **21 engineered features** (multi-horizon realised volatility, Parkinson and Garman–Klass range estimators, momentum, RSI, drawdown and Nifty 50 market context). It was trained on 21,990 rows covering 10 NSE large-cap stocks (2017–2026), using a chronological split with a 21-trading-date embargo and walk-forward cross-validation. Out of sample (4,390 test rows), the selected ridge model on log-volatility reached RMSE 0.0676 and QLIKE 0.1949. Against naive persistence it improved RMSE by 17.8% (95% block-bootstrap interval 8.4% to 25.9%) and QLIKE by 46.4% (22.3% to 62.4%). It also beat the HAR and GARCH(1,1) baselines in point estimates, although its advantage over HAR is not statistically significant. The forecast feeds the Monte Carlo simulator and the Stock Predictor's expected price range, with a transparent fallback to historical volatility whenever no valid forecast exists.
 
-The backend is verified by **338 automated tests** (336 passed, 2 skipped, 30 s) and by 12 black-box API checks. On a local machine:
+Two results are reported that a less careful evaluation would have hidden. First, **stock direction was tested and found unpredictable**: seven classifiers (logistic regression, random forest and gradient boosting) were trained on 17,390 rows and scored on 4,390 untouched rows against the training-period base rate rather than against 50%. None beat it. The best achieved a Brier skill of −0.0012 with a 95% block-bootstrap interval of −0.014 to +0.011, and the more capable models performed worse, the signature of fitting noise. The Stock Predictor therefore displays the stock's own historical base rate, explicitly labelled "Not a prediction". Second, **the expected price range was validated and does work**: backtested over 4,450 out-of-sample windows, its 95% band contained the realised price 94.8% of the time against a nominal 95%, and its 68% band 71.5% against a nominal 68.3%, outperforming trailing realised volatility which achieves only 91.7% at the 95% level.
+
+Portfolio analytics derives its daily value series from the transaction ledger as a **time-weighted index**, so deposits and withdrawals are excluded from measured returns. The naive alternative of totalling the portfolio's worth each day reports a 600% return and 406% volatility on a portfolio whose prices never moved but which received regular deposits, where the correct answer is zero for both.
+
+The backend is verified by **412 automated tests** (410 passed, 2 skipped, 40 s) and by 12 black-box API checks. On a local machine:
 - Typical analytical endpoints respond in **10–36 ms**.
 - A 10,000-path, 10-year Monte Carlo simulation completes in **0.53 s**.
 - A volatility forecast takes **117 ms**.
@@ -259,7 +264,7 @@ The project shows that a transparent, explainable and statistically honest advis
 | 7.11 | SIP planner |
 | 7.12 | Stock Explorer with live Yahoo Finance data |
 | 7.13 | Stock Predictor: 21-day outlook with expected range cone |
-| 7.14 | Portfolio tracking page (placeholder, Phase 2) |
+| 7.14 | Portfolio tracking with derived holdings and live valuation |
 | 7.15 | Volatility model compared with baselines on the test set |
 | 7.16 | Endpoint latency benchmark |
 
@@ -295,6 +300,9 @@ The project shows that a transparent, explainable and statistically honest advis
 | 6.12 | Testing tools |
 | 6.13 | Test distribution and coverage by module |
 | 7.1 | Module test results summary |
+| 7.2a | Portfolio accounting, checked by hand |
+| 7.2b | The cashflow correction, demonstrated |
+| 7.2c | Rebasing changes no metric |
 | 7.2 | Risk-score worked example |
 | 7.3 | Allocation validation at boundary scores |
 | 7.4 | SIP validation against the closed form |
@@ -304,6 +312,8 @@ The project shows that a transparent, explainable and statistically honest advis
 | 7.8 | Volatility model test-set scores |
 | 7.9 | Block-bootstrap confidence intervals |
 | 7.10 | Forecast calibration by decile |
+| 7.10a | Direction classifiers on the untouched test half |
+| 7.10b | Interval coverage, out of sample |
 | 7.11 | Endpoint latency benchmarks |
 | 7.12 | Capacity estimates |
 | 7.13 | Security compliance matrix |
@@ -396,7 +406,8 @@ The objectives of the project are:
 - User registration, login and session management with JWT.
 - Financial profile management and automated risk profiling.
 - Score-proportional portfolio recommendation.
-- Portfolio risk analytics and diversification analysis, using sample data generators so that users without broker integration can explore them.
+- **Portfolio tracking**: named portfolios, a transaction ledger (buy, sell, SIP instalment, dividend), and holdings derived from it by average-cost accounting, valued live from Yahoo Finance.
+- Portfolio risk analytics and diversification analysis **computed from those real holdings**, across all portfolios or scoped to one, with sample data retained as an explicitly labelled alternative for users who have recorded nothing yet.
 - Monte Carlo simulation with save, list, rename and delete operations, and a choice between a manual volatility and the ML forecast.
 - SIP calculation, goal-based required-SIP calculation and saved SIP plans.
 - Stock search, quotes and price history from Yahoo Finance.
@@ -406,12 +417,15 @@ The objectives of the project are:
 
 **Out of scope for this phase (planned; see Chapter 9):**
 
-- Real holdings tracking (buy/sell transactions, live portfolio value). The database tables exist, but the Portfolio page is a placeholder.
 - Goal and retirement planning, mean–variance optimisation, automated rebalancing and a conversational chat assistant.
 - PDF report export, and ETF and gold-price tracking.
 - Production deployment with PostgreSQL and cloud hosting. The current system uses SQLite and runs locally.
-- A trained classifier for the Stock Predictor's direction probability. The plumbing and evaluation code are complete, and until a model is trained the page shows the historical base rate, labelled "Not a prediction".
+- Time-weighted returns beyond the simple index used for risk metrics (XIRR), and FIFO tax-lot tracking for capital-gains reporting. Cost basis is average-cost only.
 - Execution of trades. The system is an **educational decision-support tool, not a registered investment advisor**, and it never places orders.
+
+**Tested and deliberately not shipped:**
+
+- A trained classifier for the Stock Predictor's direction probability. This is a *finding*, not an omission: seven model families were evaluated against the historical base rate and none beat it (Section 7.3.4). Shipping an unvalidated probability and calling it a prediction would have been the dishonest choice, so the page shows the base rate and says what it is.
 
 ## 1.6 Organisation of the Report
 
@@ -546,11 +560,11 @@ No freely available tool combines transparent risk profiling, statistically soun
 | LLM | Qwen2.5-3B served locally by Ollama |
 | Market data | Yahoo Finance via yfinance, with a local Parquet cache |
 | Authentication | JWT (HS256, 30-minute expiry), bcrypt (cost 12) |
-| API surface | 58 REST operations in 12 modules, self-documented with OpenAPI/Swagger |
-| Data model | 10 relational tables, 2 Alembic migrations |
-| Code size | ≈ 9,600 lines backend application, ≈ 7,400 lines frontend, ≈ 2,600 lines tests |
-| Automated tests | 338 (336 passed, 2 skipped) |
-| Repository | Private GitHub repository, 8 commits (12 Aug 2026 – 10 Oct 2026) |
+| API surface | 69 REST operations in 13 modules, self-documented with OpenAPI/Swagger |
+| Data model | 10 relational tables (146 columns), 2 Alembic migrations |
+| Code size | ≈ 9,000 lines backend application, ≈ 8,000 lines frontend, ≈ 2,600 lines tests |
+| Automated tests | 412 (410 passed, 2 skipped) |
+| Repository | Private GitHub repository (12 Aug 2026 – 20 Oct 2026) |
 
 ## 3.2 Functional Requirements
 
@@ -580,8 +594,15 @@ No freely available tool combines transparent risk profiling, statistically soun
 | FR-20 | Stock Predictor | The system shall present a 21-day outlook: a technical trend description, the probability of a higher close compared with the historical base rate, and 68% and 95% expected price ranges. |
 | FR-21 | Explanations | The system shall generate plain-language AI explanations for risk, recommendation, portfolio analysis, diversification, Monte Carlo, SIP and stock outlooks, and cache them where stored. |
 | FR-22 | Explanations | The Stock Predictor explanation shall be rejected if it contains investment advice, a guarantee, or a price move stated as certain. When the probability is only the base rate, the text shall state that it is not a prediction. |
-| FR-23 | Dashboard | The system shall present a dashboard summarising the user's profile, risk score and quick links to every module. |
+| FR-23 | Dashboard | The system shall present a dashboard summarising the user's profile, risk score, real portfolio totals and quick links to every module. |
 | FR-24 | Health | The system shall provide health endpoints for the API and for the LLM service. |
+| FR-25 | Portfolio tracking | The user shall be able to create, rename and delete named portfolios, and record buy, sell, SIP-instalment and dividend transactions against them. |
+| FR-26 | Portfolio tracking | Holdings, cost basis, realised and unrealised profit shall be **derived from the transaction ledger** by average-cost accounting, never stored separately. |
+| FR-27 | Portfolio tracking | A sale exceeding the quantity held on its date shall be rejected, and deleting a transaction that a later sale depends on shall be refused, so the stored history cannot describe an impossible position. |
+| FR-28 | Portfolio tracking | Holdings shall be valued at live market prices where a ticker is known. A holding that cannot be priced shall fall back to its last transaction price and be **labelled** as such. |
+| FR-29 | Analytics on real data | Diversification analysis and portfolio risk analytics shall run on the user's actual holdings, across all portfolios by default or scoped to one, with sample data retained as an explicitly labelled alternative. |
+| FR-30 | Analytics on real data | The daily value series used for risk metrics shall be **time-weighted**, excluding deposits and withdrawals, and shall exclude holdings with no price history rather than carrying them at a constant value. |
+| FR-31 | Sector resolution | Sectors shall be resolved from market data where a ticker exists; unresolved holdings shall be reported as "Unclassified" and the share of portfolio value affected shall be stated. |
 
 ## 3.3 Non-Functional Requirements
 
@@ -605,7 +626,7 @@ No freely available tool combines transparent risk profiling, statistically soun
 | NFR-14 | Maintainability | The schema shall be versioned. | Alembic (2 migrations) |
 | NFR-15 | Usability | The interface shall be responsive, with consistent navigation and Indian currency formatting. | Tailwind responsive layout, ₹ and lakh formatting |
 | NFR-16 | Documentation | The API shall be self-documenting. | OpenAPI at `/docs` and `/redoc` |
-| NFR-17 | Testability | Core algorithms shall have automated tests runnable with one command. | `pytest`: 338 tests in 30 s |
+| NFR-17 | Testability | Core algorithms shall have automated tests runnable with one command. | `pytest`: 412 tests in 40 s |
 
 ## 3.4 Software Requirements
 
@@ -679,7 +700,7 @@ flowchart TB
     end
 
     subgraph A["Application tier — FastAPI (port 8000)"]
-        R["12 routers · 58 operations<br/>Pydantic v2 validation · JWT dependency"]
+        R["13 routers · 69 operations<br/>Pydantic v2 validation · JWT dependency"]
         subgraph S["Service layer (stateless)"]
             S1["RiskCalculator"]
             S2["RecommendationEngine"]
@@ -764,7 +785,8 @@ flowchart TB
 | 11 | Market data | `/api/market` | `YahooFinanceService`, `StockTrendService` | — (cache) | 5 |
 | 12 | Machine learning | `/api/ml` | `MLPredictionService`, `StockTrendService` | artifacts, cache | 8 |
 | 13 | LLM health | `/api/ollama` | `OllamaService` | — | 2 |
-| | **Total** | | | | **58** |
+| 14 | **Portfolio tracking** | `/api/portfolio` | `PortfolioTracker`, `YahooFinanceService` | `portfolios`, `transactions` | 10 |
+| | **Total** | | | | **69** |
 
 ### 4.3.1 Risk Assessment Model
 
@@ -1170,7 +1192,8 @@ The API is RESTful, uses JSON throughout, and is versioned by prefix (`/api/...`
 | SIP | `POST /calculate`, `POST /explain`, `POST` and `GET /plans`, `GET`, `PUT`, `DELETE /plans/{id}` | JWT |
 | Market | `GET /search`, `GET /stock/{ticker}`, `GET /stock/{ticker}/history`, `GET /stock/{ticker}/outlook/explain`, `GET /stock/{ticker}/explain` | JWT |
 | ML | `POST /predict-volatility`, `GET /model-info`, `POST /reload-model`, `GET /features/{ticker}`, `GET /trend-outlook/{ticker}`, `GET /trend-model-info`, `POST /reload-trend-model`, `GET /cache-status` | JWT |
-| Ollama | `GET /api/ollama/health`, `GET /api/ollama/test` | Public |
+| Ollama | `GET /api/ollama/health` (public), `GET /api/ollama/test` | Mixed |
+| **Portfolio tracking** | `GET /overview`, `GET /holdings/diversification`, `GET /value-series`, `POST` and `GET /`, `GET`, `PUT`, `DELETE /{id}`, `POST` and `GET /{id}/transactions`, `DELETE /{id}/transactions/{tid}` | JWT |
 
 **Example: volatility forecast**
 
@@ -1294,22 +1317,23 @@ sequenceDiagram
 
 | # | Control | Implementation | Status |
 |---|---|---|---|
-| 1 | Password storage | bcrypt with per-password salt, cost factor 12; 72-byte limit measured in bytes, not characters | ✅ |
+| 1 | Password storage | bcrypt with per-password salt, cost factor 12; 72-byte limit measured in bytes, not characters. A malformed or non-bcrypt stored value is a verification **failure**: an earlier plain-text comparison fallback was removed, because it would have turned any non-hash written into `password_hash` into a working password | ✅ |
 | 2 | Authentication | JWT (HS256), 30-minute expiry, `type: access` claim, subject = user id | ✅ |
-| 3 | Token validation | Signature, expiry and type checked on every protected route through a FastAPI dependency | ✅ |
+| 3 | Token validation | Signature, expiry and type checked on every protected route through a FastAPI dependency declared as an `HTTPBearer` security scheme, so the OpenAPI document states which routes need a token. 64 of 69 operations require auth; the 5 public ones are root, health, register, login and the LLM health probe | ✅ |
 | 4 | Authorisation (ownership) | All queries are filtered by the current user's id; `/api/users/{id}` returns 403 for other users | ✅ |
 | 5 | Input validation | Pydantic v2 schemas with ranges, lengths, e-mail format; 422 with field detail | ✅ |
 | 6 | Path-traversal defence | Ticker validated against a strict symbol pattern before building any cache path; the hostile-ticker test never produces a path outside the cache | ✅ |
 | 7 | SQL injection | SQLAlchemy ORM with bound parameters; no string-built SQL | ✅ |
 | 8 | CORS | Allow-list from `ALLOWED_ORIGINS` (comma-separated) | ✅ |
-| 9 | Secrets management | Secrets read from `.env`, which is git-ignored | ✅ (secret must be rotated before deployment) |
+| 9 | Secrets management | Secrets read from `.env`, which is git-ignored. A placeholder `SECRET_KEY` (or one under 32 characters) raises a warning in development and **refuses startup** outside it, because the placeholder is published in `.env.example` and tokens signed with it could be forged | ✅ |
 | 10 | Model-artifact integrity | Contract check at load; bare pickles refused; the artifact must not reference the training script | ✅ |
 | 11 | AI output safety | Deterministic guard against advice, guarantees and certainty; base-rate caveat | ✅ |
 | 12 | Data privacy | LLM inference local; no third-party AI calls | ✅ |
 | 13 | Error handling | Domain errors mapped to explicit HTTP codes with readable messages; unhandled exceptions return a generic 500 without a stack trace | ✅ |
-| 14 | Rate limiting / brute-force protection | Not implemented (bcrypt cost slows guessing to about 1 attempt/s/core) | ⏳ Planned |
-| 15 | HTTPS / TLS | Local HTTP only | ⏳ Planned for deployment |
-| 16 | Refresh tokens / revocation | Not implemented (short 30-minute expiry instead) | ⏳ Planned |
+| 14 | Ledger integrity | A sale exceeding the quantity held is rejected at write time, and deleting a transaction a later sale depends on is refused, so stored history cannot describe an impossible position | ✅ |
+| 15 | Rate limiting / brute-force protection | Not implemented (bcrypt cost slows guessing to about 1 attempt/s/core) | ⏳ Planned |
+| 16 | HTTPS / TLS | Local HTTP only | ⏳ Planned for deployment |
+| 17 | Refresh tokens / revocation | Not implemented (short 30-minute expiry instead) | ⏳ Planned |
 
 ## 4.10 User Interface Design
 
@@ -1392,11 +1416,11 @@ Design principles:
 
 | Component | Lines |
 |---|---|
-| Backend application (`backend/app`: routers, services, models, schemas, core, ml) | 9,637 |
-| Dataset preparation and training scripts (`backend/ml`, `backend/scripts`) | 1,282 |
-| Backend tests (`backend/tests`) | 2,564 |
-| Frontend (`frontend/src`) | 7,355 |
-| **Total** | **20,838** |
+| Backend application (`backend/app`: routers, services, models, schemas, core, ml) | 9,038 |
+| Dataset preparation, training and evaluation scripts (`backend/ml`, `backend/scripts`) | 1,377 |
+| Backend tests (`backend/tests`) | 2,626 |
+| Frontend (`frontend/src`) | 7,959 |
+| **Total** | **21,000** |
 
 ## 5.2 Project Structure
 
@@ -1415,16 +1439,20 @@ AI Smart Investment Portfolio Advisor/
 │   │   │                              #   portfolio_risk_analyzer, diversification_analyzer,
 │   │   │                              #   monte_carlo_simulator, sip_calculator,
 │   │   │                              #   yahoo_finance_service, ml_prediction_service,
-│   │   │                              #   stock_trend_service, ollama_service, ollama_prompts,
+│   │   │                              #   stock_trend_service, portfolio_tracker,
+│   │   │                              #   ollama_service, ollama_prompts,
 │   │   │                              #   explanation_guard
 │   │   └── ml/                        # config, data, features, evaluation,
 │   │                                  #   model_registry, trend, trend_registry
 │   ├── ml/                            # prepare_volatility_dataset.py, prepare_trend_dataset.py
-│   ├── scripts/train_volatility_model.py
+│   ├── scripts/                        # training and evaluation entry points
+│   │   ├── train_volatility_model.py
+│   │   ├── evaluate_trend_classifier.py   # direction: 7 models, saves only on a real edge
+│   │   └── validate_expected_range.py     # backtests the interval's coverage
 │   ├── alembic/versions/              # 0001_baseline, 0002_add_volatility_provenance
 │   ├── models/                        # trained artifacts (git-ignored)
 │   ├── data_cache/                    # Parquet price cache (git-ignored)
-│   ├── tests/                         # 9 test modules, 338 tests
+│   ├── tests/                         # 11 test modules, 412 tests
 │   └── requirements.txt
 ├── frontend/
 │   └── src/
@@ -1618,6 +1646,98 @@ for k in range(horizon + 1):
 ```
 
 Here σ is the ML volatility forecast, or the historical fallback. The range says *how far* the price may move, not *which way*; direction lives only in the probability.
+
+### 5.3.11 Portfolio Tracker
+
+Portfolio tracking is the module where a silent error would be least
+visible: a wrong number still looks like money. Two design decisions
+follow from that.
+
+**Holdings are derived, never stored.** A stored position must be kept in
+step with every buy, sell and correction, and the two drift apart the
+moment one write fails. Replaying the ledger on each read means the
+transactions are the only thing that can be wrong, and any holding can be
+explained by the rows that produced it.
+
+**Cost basis uses the average-cost method**, which is what Indian mutual
+funds report, needs no lot tracking, and makes a partial sale
+unambiguous.
+
+```python
+# app/services/portfolio_tracker.py (excerpt)
+if txn.transaction_type in PURCHASE_TYPES:
+    # Fees are part of what the position cost to acquire.
+    position["quantity"] += quantity
+    position["cost_basis"] += total + fees
+
+elif txn.transaction_type == SELL:
+    held = position["quantity"]
+    if quantity > held + CLOSED_POSITION_EPSILON:
+        raise InsufficientHoldingError(...)          # rejected at write time
+
+    average_cost = position["cost_basis"] / held if held else 0.0
+    cost_removed = average_cost * quantity
+    booked = (total - fees) - cost_removed           # realised profit
+    position["realised_pnl"] += booked
+    position["quantity"] = held - quantity
+    position["cost_basis"] = max(0.0, position["cost_basis"] - cost_removed)
+```
+
+A sale larger than the quantity held *on its date* is refused, and so is
+deleting a purchase that a later sale depends on: in both cases the whole
+ledger is replayed before the write is accepted, so a back-dated row
+cannot create an impossible position.
+
+**Valuation is labelled.** Live prices come from Yahoo Finance, and the
+same response supplies the holding's sector, so classification costs no
+extra network call. A holding that cannot be priced falls back to its
+last transaction price and is tagged `last_transaction_price`, exactly as
+the volatility service tags a historical fallback. Such a holding shows
+no gain *by construction*, which is very different from a genuine flat
+return, so the label travels with the number and the interface repeats it.
+
+### 5.3.12 Time-Weighted Value Series
+
+Portfolio Analytics needs a daily value series, and the obvious way to
+build one is wrong. Totalling what the portfolio is worth each day makes
+every deposit look like a one-day gain, so measured volatility would
+depend on how often the investor happened to add money.
+
+Each day's return is therefore computed from **price movement only**:
+yesterday's holdings are revalued at today's prices, and the day's
+transactions are applied afterwards.
+
+```python
+# Yesterday's holdings, revalued at today's prices. Today's trades are
+# deliberately not applied yet: including them would fold a cashflow
+# into the day's return.
+value_at_today_prices = sum(
+    (price_on(symbol, date, last_known) or 0.0) * quantity
+    for symbol, quantity in quantities.items()
+)
+
+if prev_value > 0:
+    dividend = sum(...)                       # income the price series misses
+    daily_return = (value_at_today_prices + dividend) / prev_value - 1.0
+    nav *= (1.0 + daily_return)
+    series.append({"date": date, "value": round(nav, 2)})
+
+for txn in by_date.get(date, []):             # take effect from tomorrow
+    PortfolioTracker._apply_to_quantities(txn, quantities, priced)
+```
+
+Holdings with no price history are **excluded rather than carried flat**,
+because a constant line has zero variance and would drag measured
+volatility toward zero — making a portfolio look safer the less of it
+could be priced. The response reports the share of invested value the
+series actually covers.
+
+The series is returned **rebased to 100**. Because cashflows are
+excluded, its level cannot track what the portfolio is worth, and
+presenting it in rupees invited exactly that misreading. Every metric the
+analyzer derives from it depends only on ratios, so the base is free to
+be whatever is least misleading. Section 7.2 verifies that rebasing
+changes no metric.
 
 ## 5.4 Machine Learning Implementation
 
@@ -1870,10 +1990,12 @@ npm install
 npm start                      # http://localhost:3000
 
 # 4. Tests
-cd backend && pytest -q        # 336 passed, 2 skipped
+cd backend && pytest -q        # 410 passed, 2 skipped
 
 # 5. Volatility model (optional; artifacts are git-ignored)
 python scripts/train_volatility_model.py --dry-run --garch   # evaluate only
+python scripts/evaluate_trend_classifier.py                   # direction: expected answer is "no edge"
+python scripts/validate_expected_range.py                     # does the 95% band contain 95%?
 python scripts/train_volatility_model.py --garch             # save if accepted
 ```
 
@@ -1900,7 +2022,7 @@ Design principles of the test suite:
 - **Adversarial inputs.** Hostile tickers, over-long passwords, forged tokens, models that raise exceptions or return NaN.
 - **Tests that prove a bug exists before proving it is fixed.** For example, `test_a_row_based_embargo_really_does_leak_on_a_pooled_panel` demonstrates the leak that the date-based embargo prevents.
 
-**Overall result:** 338 tests collected, **336 passed, 2 skipped, 0 failed**, in **29.99 s** (pytest 9.1.1, Python 3.13.7). The two skips are by design. A test that checks the serving guard rejects an *overflowed* prediction is parametrised over three model families, and it is skipped for HistGradientBoosting and RandomForest because tree ensembles cannot extrapolate beyond their training range and so cannot overflow.
+**Overall result:** 412 tests collected, **410 passed, 2 skipped, 0 failed**, in **40.2 s** (pytest 9.1.1, Python 3.13.7). The two skips are by design. A test that checks the serving guard rejects an *overflowed* prediction is parametrised over three model families, and it is skipped for HistGradientBoosting and RandomForest because tree ensembles cannot extrapolate beyond their training range and so cannot overflow.
 
 ## 6.2 Unit Testing
 
@@ -2130,6 +2252,7 @@ Line coverage was not instrumented (`pytest-cov` is not part of the environment)
 | Test module | Tests | Module(s) under test | Behaviours covered |
 |---|---|---|---|
 | `test_ml_trend.py` | 69 | `ml/trend.py`, `ml/trend_registry.py`, `services/stock_trend_service.py` | Labels, signals, base rate, expected range, Brier skill, registry contract, fallback |
+| `test_portfolio_tracker.py` | 53 | `services/portfolio_tracker.py` | Average-cost accounting, overselling and back-dated sales, dividends, valuation labelling, sector resolution and coverage, time-weighted series, multi-portfolio scoping |
 | `test_ml_explain.py` | 53 | `services/ollama_prompts.py`, `services/explanation_guard.py`, explain endpoint | Prompt rules and facts, guard rejects and accepts, caveat, endpoint behaviour |
 | `test_ml_features.py` | 50 | `ml/features.py` | 21 features, no look-ahead, targets, direction label, training table, date embargo |
 | `test_train_volatility_script.py` | 50 | `scripts/train_volatility_model.py` | Embargo verification, date folds, 1-SE rule, acceptance, environment pins, pickle safety |
@@ -2137,8 +2260,9 @@ Line coverage was not instrumented (`pytest-cov` is not part of the environment)
 | `test_ml_data.py` | 28 | `ml/data.py`, ML request schemas | Ticker validation, cache-path safety, 422 vs 500 |
 | `test_ml_registry_and_service.py` | 22 | `ml/model_registry.py`, `services/ml_prediction_service.py` | Contract enforcement, fallback paths, plausibility guard |
 | `test_ml_evaluation.py` | 20 | `ml/evaluation.py` | RMSE, MAE, QLIKE properties, naive and HAR baselines, comparison |
-| `test_security.py` | 16 | `core/security.py`, user schemas | bcrypt, byte limits, JWT round trip and rejection |
-| **Total** | **338** | | **336 passed · 2 skipped · 0 failed · 29.99 s** |
+| `test_security.py` | 20 | `core/security.py`, user schemas | bcrypt, byte limits, JWT round trip and rejection, no plain-text fallback |
+| `test_evaluate_trend_script.py` | 17 | `scripts/evaluate_trend_classifier.py` | Source constraints, candidate families, block-bootstrap interval, acceptance bar, save gating |
+| **Total** | **412** | | **410 passed · 2 skipped · 0 failed · 40.2 s** |
 
 Modules covered by integration and UI testing rather than unit tests: the risk calculator, recommendation engine, portfolio risk analyzer, diversification analyzer, SIP calculator and the CRUD routers. Their outputs were validated against closed-form results in Section 7.2. Adding unit tests for them is part of Phase 1 future work.
 
@@ -2166,7 +2290,7 @@ All results below were produced by the running system with the demo profile: age
 | ML volatility | 142 | 3 | Baselines on held-out data (Section 7.3) | ✅ Working (model trained) |
 | Stock Predictor | 69 | 2 | Closed-form range (Table 7.7) | ✅ Working (base rate; classifier pending) |
 | AI explanations | 53 | 1 | Guard rules | ✅ Working |
-| Portfolio tracking | — | — | — | ⏳ Placeholder (Phase 2) |
+| Portfolio tracking | 53 | 12 | Hand-computed average-cost accounting (Table 7.2a) | ✅ Working |
 
 ### 7.1.1 Landing, Login and Registration
 
@@ -2181,7 +2305,7 @@ All results below were produced by the running system with the demo profile: age
 
 ### 7.1.2 Dashboard and Financial Profile
 
-The dashboard summarises the profile (savings rate 29.4%), the risk score (85.3, Aggressive) and quick links to every module. Because holdings tracking is not yet implemented, the portfolio value tiles at the top show ₹0. They will be populated in Phase 2.
+The dashboard summarises the profile (savings rate 29.4%), the risk score (85.3, Aggressive), **real portfolio totals drawn from the transaction ledger**, and quick links to every module. With the demo portfolios recorded it shows ₹2,98,171 invested against a current value of ₹2,96,384. A banner appears when any holding could not be priced live, so a stale valuation is never mistaken for a flat return.
 
 ![Dashboard](figures/fig_dashboard.png)
 **Figure 7.4: Dashboard**
@@ -2207,19 +2331,34 @@ The recommendation engine returns **Stocks 65.5%, Mutual Funds 21.6%, Gold 7.2%,
 
 ### 7.1.5 Portfolio Risk Analytics
 
-A one-year sample series (₹1,00,000 start, 252 days, 15% volatility, 10% expected return) gives:
-- **risk score 39.0 (Moderate)**;
-- volatility **14.71%**, which correctly recovers the 15% used to generate the series;
-- Sharpe **0.91**;
-- maximum drawdown **−5.80%**;
-- total return **+20.06%**, with an annualised average of 19.44% and an excess return of 13.44% over the 6% risk-free rate.
+The page now measures the user's **actual** holdings. Their daily value series is rebuilt from the transaction ledger and historical prices as a time-weighted index (Section 5.3.12), so deposits and withdrawals do not register as returns.
+
+For the demo portfolios, rebuilt over 156 trading days:
+
+| Scope | Holdings | Volatility | Sharpe | Max drawdown | Risk score |
+|---|---|---|---|---|---|
+| All portfolios combined | 6 | 22.26% | — | −18.62% | High |
+| Long Term Equity only | 4 | 23.07% | −0.80 | −17.57% | 63.61 (High) |
+| Short Term Trading only | 2 | 23.34% | — | −20.18% | High |
+
+Each portfolio is measured over its own history, so the windows differ (155 days against 77).
+
+The contrast with the generated sample series is the point of the change. The same page previously reported volatility 14.71%, Sharpe 0.91 and risk 39.0 (Moderate) from a synthetic series — plausible-looking numbers that described nothing the user owned.
+
+Holdings without price history are excluded from the series rather than held at a constant value, and the page states the coverage: for these portfolios the series covers 48.03% of invested value, the remainder being an unlisted gold bond.
 
 ![Portfolio analytics](figures/fig_portfolio_analytics.png)
 **Figure 7.8: Portfolio risk analytics**
 
 ### 7.1.6 Diversification Analysis
 
-The "well diversified" sample portfolio of ₹10 lakh (12 holdings, 8 sectors, 4 asset types) scores **95.0 (Excellent)** with **HHI 9.78** and no concentration warnings. The largest sector is Diversified at 25% and the largest asset class is Stocks at 50%. The "concentrated" sample scores **17.0** with **HHI 30.0** and **3 warnings**, showing that the score separates the two cases clearly.
+The page analyses the user's real holdings. Sectors are resolved from the same Yahoo Finance response that supplies the price, so classification costs no additional network call: Reliance resolves to Energy, TCS and Infosys to Technology, HDFC Bank to Financial Services, and the gold bond is treated as its own sector.
+
+For the demo portfolios the analyser returns a diversification score of **29.75** with **HHI 51.87**, and warns that gold represents a dominant share of the portfolio. Scoped to one portfolio the scores are 24.64 (Long Term Equity) and 10.42 (Short Term Trading, two holdings). That combining them *improves* the score is diversification working as intended.
+
+Holdings whose sector cannot be resolved are reported as "Unclassified" rather than guessed, and coverage is measured **by value rather than by count**: with one classified and one unclassified holding, counting would claim 50% coverage while the unclassified position held 87% of the money. The page reports the value share and warns that the sector score then reflects missing data as much as real concentration.
+
+The sample generators remain available and are explicitly labelled as not the user's portfolio. On them the "well diversified" sample of ₹10 lakh (12 holdings, 8 sectors, 4 asset types) scores **95.0 (Excellent)** with **HHI 9.78**, while the "concentrated" sample scores **17.0** with **HHI 30.0** and 3 warnings, showing the score separates the two cases clearly.
 
 ![Diversification](figures/fig_diversification.png)
 **Figure 7.9: Diversification analysis**
@@ -2279,10 +2418,25 @@ For RELIANCE.NS on 14 October 2026:
 ![Stock predictor](figures/fig_stock_predictor.png)
 **Figure 7.13: Stock Predictor: 21-day outlook with expected range cone**
 
-### 7.1.11 Portfolio Page (Phase 2)
+### 7.1.11 Portfolio Tracking
 
-![Portfolio placeholder](figures/fig_portfolio.png)
-**Figure 7.14: Portfolio tracking page (placeholder, Phase 2)**
+The page records transactions and derives everything else from them. The demo data comprises two portfolios and ten transactions covering buys, a partial sale, SIP instalments, a dividend and an unlisted asset.
+
+![Portfolio tracking](figures/fig_portfolio.png)
+**Figure 7.14: Portfolio tracking with derived holdings and live valuation**
+
+Combined totals: **₹2,98,171 invested**, current value **₹2,96,384**, a gain of **₹1,233 (+0.41%)**. Per holding:
+
+| Holding | Qty | Avg cost | Price | Unrealised P&L | Price source |
+|---|---|---|---|---|---|
+| Sovereign Gold Bond 2032 | 30 | ₹6,100.00 | ₹6,100.00 | ₹0 (0.0%) | `last_transaction_price` |
+| Reliance Industries | 30 | ₹1,209.67 | ₹1,202.00 | −₹230 (−0.6%) | live |
+| ITC | 100 | ₹300.15 | ₹260.80 | −₹3,935 (−13.1%) | live |
+| Tata Consultancy Services | 10 | ₹2,292.00 | ₹2,460.90 | +₹1,689 (+7.4%) | live |
+| Infosys | 16 | ₹1,103.50 | ₹1,130.70 | +₹435 (+2.5%) | live |
+| HDFC Bank | 12 | ₹690.83 | ₹712.00 | +₹254 (+3.1%) | live |
+
+The gold bond has no ticker, so it is valued at its last transaction price and shows no gain **by construction**. The interface labels that row and raises a banner, because an unpriced holding must not be read as a flat return.
 
 ## 7.2 Validation of Financial Computations
 
@@ -2300,6 +2454,49 @@ Each deterministic module was checked against an independent calculation.
 | **Total** | | **1.00** | **85.31 → Aggressive** |
 
 System output: **85.31, Aggressive**. ✅ Match.
+
+**Table 7.2a: Portfolio accounting, checked by hand**
+
+Average-cost accounting over the demo ledger, each figure computed
+independently and compared with the system's output.
+
+| Check | Hand calculation | System |
+|---|---|---|
+| Reliance average cost (two buys plus fees) | (20×1180 + 25 + 10×1265 + 15) ÷ 30 = **₹1,209.67** | ₹1,209.67 ✓ |
+| TCS realised profit on a partial sale | (5×2720 − 20) − (₹2,292 × 5) = **₹2,120** | ₹2,120 ✓ |
+| Infosys average cost (two SIP instalments) | (8×1065 + 8×1142) ÷ 16 = **₹1,103.50** | ₹1,103.50 ✓ |
+| Total invested across both portfolios | **₹2,98,171** | ₹2,98,171 ✓ |
+
+**Table 7.2b: The cashflow correction, demonstrated**
+
+A portfolio whose prices never move, but which receives a deposit every
+third day. The truth is a 0% return and zero volatility; anything else is
+an artefact of the method.
+
+| Method | Reported return | Reported volatility |
+|---|---|---|
+| Naive daily totals | +600.00% | 405.67% |
+| **Time-weighted index (implemented)** | **0.00%** | **0.00%** |
+
+This is why Section 5.3.12 excludes transactions from the day's return.
+The naive series is not slightly wrong; it is unusable, and it would have
+made measured risk a function of how often the investor saved.
+
+**Table 7.2c: Rebasing changes no metric**
+
+The value series is rebased to 100 for display. Scoring the rebased
+series and the same shape scaled back into rupees gives identical
+results, confirming the change is presentational:
+
+| Metric | Indexed series | Rupee-scaled series |
+|---|---|---|
+| Volatility | identical | identical |
+| Sharpe ratio | identical | identical |
+| Maximum drawdown | identical | identical |
+| Total return | identical | identical |
+
+Verified by `test_rebasing_does_not_change_any_risk_metric`, which
+asserts equality to floating-point tolerance.
 
 **Table 7.3: Allocation validation at boundary and demo scores**
 
@@ -2406,9 +2603,85 @@ xychart-beta
 
 Predictions span 0.18–0.31, while realised volatility spans 0.08–0.56. The forecasts are **compressed toward the average**: calm periods are over-forecast by about 18% and the most volatile decile is under-forecast by about 14%. Compression is expected from a heavily regularised model (α = 30,000) trained on a low signal-to-noise target, because shrinking toward the mean minimises average loss. For a risk tool, though, under-forecasting in turbulent periods is the costly direction: it makes the Monte Carlo spread and the price-range cone too narrow exactly when caution matters most. Section 9 proposes remedies, including quantile or regime-aware models, post-hoc recalibration, and asymmetric loss.
 
-### 7.3.4 Stock Predictor Direction Model
+### 7.3.4 Stock Predictor Direction Model: Tested, No Edge Found
 
-The direction-classifier pipeline is complete: labels, training table, registry contract, Brier-skill evaluation, serving and fallback, all covered by tests. However, no classifier has yet been trained and validated. Until one beats the base rate on Brier skill on held-out data, the system shows the base rate and labels it as such. This is deliberate. Over a one-month horizon, stock direction is close to unpredictable, and showing an unvalidated "AI prediction" would be misleading.
+Direction was not left untested. Seven classifiers were trained on 17,390
+rows and scored on 4,390 untouched rows by
+`scripts/evaluate_trend_classifier.py`, which reproduces the whole
+experiment.
+
+The baseline is deliberately strict. A model is scored against the
+**training-period base rate**, not against 50%, because most large caps
+rise more often than they fall over a month and beating a coin flip would
+prove nothing. Scoring uses **Brier skill**, a proper scoring rule applied
+to the probability itself: a model can be "right" 55% of the time while
+its probabilities are worthless.
+
+**Table 7.10a: Direction classifiers on the untouched test half (4,390 rows)**
+
+| Model | Brier | Base rate | Brier skill | AUC | Accuracy |
+|---|---|---|---|---|---|
+| Logistic regression (C = 1.0) | 0.2645 | 0.2642 | **−0.0012** | 0.562 | 0.466 |
+| Logistic regression (C = 0.1) | 0.2647 | 0.2642 | −0.0018 | 0.562 | 0.460 |
+| Logistic regression (C = 0.01) | 0.2653 | 0.2642 | −0.0040 | 0.564 | 0.456 |
+| Random forest (depth 5) | 0.2693 | 0.2642 | −0.0191 | 0.523 | 0.461 |
+| Random forest (depth 8) | 0.2707 | 0.2642 | −0.0245 | 0.530 | 0.483 |
+| HistGradientBoosting (depth 2) | 0.2706 | 0.2642 | −0.0242 | 0.524 | 0.489 |
+| HistGradientBoosting (depth 3) | 0.2710 | 0.2642 | −0.0255 | 0.528 | 0.493 |
+
+**Not one beat the base rate.** The best managed a Brier skill of
+−0.0012, and a 21-day block bootstrap over 2,000 resamples puts its 95%
+interval at **−0.0143 to +0.0110**, straddling zero. The ordering is also
+informative: the most capable families score *worst*, which is what
+fitting noise looks like.
+
+Two further observations explain why. The regime shifted between the
+halves — 58.3% of training windows rose against 45.6% in test — so a
+model that learned "Indian large caps drift upward" met a market that did
+not. Its predictions span 0.316 to 0.791 centred near the training rate
+of 0.583, against a realised 0.456: systematically over-optimistic rather
+than randomly wrong. The AUC of about 0.56 shows a faint ranking signal,
+far too weak to survive that shift and yield calibrated probabilities.
+
+This is the expected result and is reported as a finding. One-month
+equity direction is close to unpredictable from price history alone —
+weak-form market efficiency — and an edge available to a 21-feature model
+on a laptop would long since have been arbitraged away. The script
+therefore saves a model **only** when its bootstrap interval excludes
+zero, so a merely lucky candidate cannot reach the interface. The Stock
+Predictor shows the stock's own base rate, labelled "Not a prediction",
+with this evidence one click away in the page itself.
+
+### 7.3.5 The Expected Range: Validated and Working
+
+Direction is unpredictable; magnitude is not. The module's real output is
+the expected price range, and
+`scripts/validate_expected_range.py` backtests whether it means what it
+says over 4,450 out-of-sample windows across the ten training tickers.
+
+**Table 7.10b: Interval coverage, out of sample**
+
+| Band | Nominal | **ML volatility** | Trailing `rv_21` |
+|---|---|---|---|
+| 68% ("likely") | 68.3% | **71.5%** | 67.5% |
+| 95% ("wide") | 95.0% | **94.8%** | 91.7% |
+
+The 95% band is almost exactly calibrated, and it beats the trailing
+estimate, which under-covers at 91.7% — wrong 8.3% of the time instead of
+5%. This is where the volatility model earns its place: its point
+forecasts are only modestly better than HAR, but its *intervals* are
+materially better than the naive alternative a practitioner would reach
+for.
+
+Aggregate coverage can hide a conditional failure, so coverage was also
+measured by volatility regime. The 95% band holds across all five
+quintiles (93.0% to 97.4%). The 68% band over-covers slightly when calm
+(about 74%) and under-covers in the most stressed quintile (64.5%), which
+is the known forecast compression of Section 7.3.3 showing through. The
+single multipliers that would correct the two bands are 0.93 and 1.01,
+both within noise of 1.0, so **no recalibration was applied**: fitting a
+correction to one test window would be overfitting, and the honest course
+is to document the behaviour.
 
 ## 7.4 Performance Benchmarks
 
@@ -2425,6 +2698,11 @@ Measured on the development laptop (Windows 11, CPU only), backend running witho
 | Calculate risk profile | 18.3 | 21.3 |
 | Generate portfolio recommendation | 21.4 | 25.7 |
 | Diversification analysis (12 holdings) | 27.0 | 30.0 |
+| Holdings for diversification (sectors resolved, cached) | 7.2 | 8.7 |
+| Portfolio overview (6 holdings, all portfolios) | 10.2 | 11.9 |
+| Transaction ledger | 12.0 | 14.5 |
+| Portfolio detail (one portfolio) | 13.6 | 17.5 |
+| Value series (156 trading days, 5 tickers) | 39.4 | 66.2 |
 | Portfolio risk analysis (252 daily values) | 35.5 | 39.0 |
 | Stock Predictor outlook (cached history) | 49.4 | 61.7 |
 | Stock info (live Yahoo Finance) | 62.5 | 64.4 |
@@ -2471,8 +2749,8 @@ Observations:
 
 | OWASP category | Control in this system | Evidence | Status |
 |---|---|---|---|
-| A01 Broken Access Control | JWT on 50 of 58 operations; per-user query filtering; ownership check on `/users/{id}` | IT-N1, IT-N2, IT-N6 | ✅ Compliant (sample-data and Ollama endpoints are public: low-risk, but should be authenticated before deployment) |
-| A02 Cryptographic Failures | bcrypt cost 12; HS256-signed tokens; secrets in `.env` | SEC-01…13 | ⚠️ Partial: development `.env` uses a placeholder `SECRET_KEY`; no TLS locally |
+| A01 Broken Access Control | JWT on 64 of 69 operations, declared in the OpenAPI document; per-user query filtering; ownership check on `/users/{id}`; an unknown `portfolio_id` is a 404, not a silent fallback to all portfolios | IT-N1, IT-N2, IT-N6 | ✅ Compliant (the 5 public operations are root, health, register, login and the LLM health probe) |
+| A02 Cryptographic Failures | bcrypt cost 12 with no plain-text fallback; HS256-signed tokens; secrets in `.env`; a placeholder `SECRET_KEY` refuses startup outside DEBUG | SEC-01…13, TestNoPlainTextFallback | ⚠️ Partial: no TLS locally |
 | A03 Injection | ORM bound parameters; strict ticker pattern; Pydantic validation | IT-N9, DA-02, DA-05 | ✅ Compliant |
 | A04 Insecure Design | Fallbacks labelled; output guard; acceptance gate for models | Sections 4.5, 5.4 | ✅ Compliant |
 | A05 Security Misconfiguration | CORS allow-list; settings from environment, not code | Config | ⚠️ Partial: production hardening pending |
@@ -2495,16 +2773,16 @@ Observations:
 
 | # | Limitation | Impact |
 |---|---|---|
-| L1 | Volatility forecasts are compressed (Section 7.3.3) | Spreads too narrow in turbulent markets |
+| L1 | Volatility forecasts are compressed (Section 7.3.3) | 68% band under-covers in the most stressed quintile (64.5% against 68.3%); the 95% band is unaffected |
 | L2 | Advantage over HAR not statistically significant; one test regime (Dec 2024 – Sep 2026) | Claims limited to "no worse than HAR" |
-| L3 | Stock Predictor classifier not trained | Probability is the base rate only |
-| L4 | Portfolio tracking not implemented; dashboard value tiles show ₹0 | No real holdings analysis |
-| L5 | Risk page shows tier guideline (70/20/10) while the recommendation is score-proportional | Minor inconsistency in the UI |
-| L6 | UI says AI insights "may take 10–15 seconds"; CPU inference takes 30–55 s | Expectation mismatch |
+| L3 | Direction is not predicted | Tested across seven model families and found unpredictable (Section 7.3.4). Reported as a finding; the page shows the base rate, labelled |
+| L4 | Portfolio returns are reported two ways | Tracking shows a simple money-weighted return, Analytics a time-weighted one. Both are correct for their question but they differ, which needs explaining to users |
+| L5 | Sector is resolved from market data, not stored | A holding with no ticker stays "Unclassified"; sector concentration then reflects missing data, which the page states by value |
+| L6 | Cost basis is average-cost only | No FIFO tax-lot tracking, so the figures do not support Indian LTCG/STCG reporting |
 | L7 | Risk weights and thresholds are expert-chosen, not empirically calibrated | Score is transparent but not validated against outcomes |
 | L8 | GBM assumes constant σ and normal log-returns (no fat tails or jumps); the expected return is user-supplied | Tail risk may be understated |
-| L9 | Savings greater than income is not rejected by the profile schema | Possible nonsensical input |
-| L10 | No rate limiting; placeholder dev secret; some public utility endpoints; no client-side route guard | Must be fixed before deployment |
+| L9 | Value series excludes unpriceable holdings | Risk metrics describe only the priced share of the portfolio; coverage is reported (48.03% for the demo data) |
+| L10 | No rate limiting; no client-side route guard; HTTP only | Must be addressed before deployment |
 | L11 | No line-coverage measurement; no frontend automated tests; no CI pipeline | Regression risk in untested modules |
 | L12 | SQLite and local deployment only | Not multi-user production-ready |
 
@@ -2520,10 +2798,10 @@ Observations:
 | Monte Carlo simulation | ✅ Delivered (with ML volatility and VaR/CVaR) |
 | SIP planner | ✅ Delivered |
 | Live stock data | ✅ Delivered |
-| Stock Predictor | ✅ Delivered (trend, base-rate probability, ML-driven range); classifier pending |
+| Stock Predictor | ✅ Delivered (trend, base-rate probability, validated ML-driven range); direction classifier evaluated and rejected on evidence |
 | AI explanations (LLM) | ✅ Delivered (local, cached, guarded) |
 | ML volatility forecasting | ✅ Delivered (trained and evaluated) |
-| Portfolio tracking (holdings, transactions) | ⏳ Phase 2 (schema exists) |
+| Portfolio tracking (holdings, transactions) | ✅ Delivered (ledger-derived holdings, live valuation, realised/unrealised P&L) |
 | Goal planning and retirement planning | ⏳ Phase 2 |
 | Portfolio optimisation (mean–variance) | ⏳ Phase 3 |
 | Automated rebalancing alerts | ⏳ Phase 3 |
@@ -2540,7 +2818,7 @@ This project designed, implemented and evaluated the **AI Smart Investment Portf
 
 The main outcomes are:
 
-1. **A complete, working system.** It comprises a FastAPI backend with 58 REST operations across 12 modules and 10 database tables, and a React frontend with 15 pages and rich visualisations. The system runs entirely on a laptop, including the language model.
+1. **A complete, working system.** It comprises a FastAPI backend with 69 REST operations across 14 modules and 10 database tables, and a React frontend with 15 pages and rich visualisations. The system runs entirely on a laptop, including the language model.
 
 2. **Transparent, verified financial computation.**
    - The risk score, allocation, portfolio analytics, diversification score and SIP calculations are documented formulas whose outputs were checked against independent closed-form calculations, with exact agreement.
@@ -2552,23 +2830,26 @@ The main outcomes are:
    - It outperformed GARCH(1,1) and matched or slightly exceeded the HAR benchmark.
    - The forecast drives the Monte Carlo spread and the Stock Predictor's price range, and a labelled fallback is used whenever the model cannot be trusted.
 
-4. **A Stock Predictor that separates description from prediction.** It shows a technical trend (the past), the probability of a rise compared against the stock's own base rate (labelled "Not a prediction" until a validated classifier exists) and a direction-free expected range.
+4. **Portfolio tracking whose numbers can be trusted.** Holdings are derived from a transaction ledger by average-cost accounting rather than stored, so they cannot drift out of step with the history behind them; every figure was checked by hand. The ledger refuses to record an impossible position. Risk metrics are computed from a **time-weighted** value series, because the naive alternative reports a 600% return and 406% volatility on a portfolio whose prices never moved.
 
-5. **Safe, private AI explanations.**
+5. **A Stock Predictor that separates description from prediction, and proves which is which.** Direction was tested across seven model families and found unpredictable — none beat the historical base rate, best Brier skill −0.0012 with a 95% interval of −0.014 to +0.011 — so the page shows that base rate, labelled "Not a prediction", with the evidence available in the interface. The expected price range *was* validated: its 95% band contained the realised price 94.8% of the time over 4,450 out-of-sample windows, outperforming trailing realised volatility's 91.7%.
+
+6. **Safe, private AI explanations.**
    - A locally hosted Qwen2.5-3B model explains every module's output, so no financial data leaves the user's machine.
    - Explanations are cached.
    - For the Stock Predictor, a deterministic guard discards text that gives advice, offers guarantees or states price moves as certain.
 
-6. **Engineering quality.**
+7. **Engineering quality.**
    - Security: bcrypt (cost 12), JWT, ownership checks and strict input validation.
    - Versioned migrations and self-documenting OpenAPI.
-   - **338 automated tests** (336 passed, 2 skipped by design), plus black-box API checks covering both positive and negative paths.
+   - **412 automated tests** (410 passed, 2 skipped by design), plus black-box API checks covering both positive and negative paths.
    - Analytical endpoints respond in 10–36 ms, and a 10,000-path simulation completes in about half a second.
 
 The project also made its limits clear:
-- the volatility forecasts are compressed toward the mean;
-- the advantage over HAR is not statistically significant;
-- the direction classifier and holdings tracking remain to be built;
+- the volatility forecasts are compressed toward the mean, so the 68% band under-covers in the most turbulent conditions;
+- the advantage over HAR is not statistically significant, and only one test regime was available;
+- stock direction could not be predicted at all, which is reported rather than disguised;
+- holdings without a ticker cannot be priced or classified, and the affected share of the portfolio is stated rather than hidden;
 - the system is not yet hardened for multi-user deployment.
 
 Reporting these openly is itself a result. It shows how a financial AI tool can earn trust: by being explicit about uncertainty, testing its claims against strong baselines, and refusing to present a historical frequency as a forecast.
@@ -2587,16 +2868,16 @@ Future work is organised into four phases, in order of dependency and value.
 |---|---|---|
 | 1.1 | Unit tests for the risk calculator, recommendation engine, portfolio analyzer, diversification analyzer and SIP calculator; line-coverage reporting with `pytest-cov`; a continuous-integration pipeline (GitHub Actions) | L11 |
 | 1.2 | Frontend tests with React Testing Library and an end-to-end smoke test | L11 |
-| 1.3 | Align the Risk page's guideline with the score-proportional recommendation; correct the AI loading-time message | L5, L6 |
-| 1.4 | Validate savings ≤ income; add a client-side `ProtectedRoute` | L9, L10 |
-| 1.5 | Authenticate the sample-data and Ollama utility endpoints; rate-limit login (for example with `slowapi`); enforce a strong `SECRET_KEY` at startup | L10 |
+| 1.3 | ~~Align the Risk page's guideline with the score-proportional recommendation; correct the AI loading-time message~~ — **done**: `RiskCalculator` now delegates to `RecommendationEngine`, so both pages report 65.5/21.6/7.2/5.7 at score 85.31 | — |
+| 1.4 | ~~Validate savings ≤ income~~ — **done**. Add a client-side `ProtectedRoute` (protection is currently enforced by the API alone) | L10 |
+| 1.5 | ~~Authenticate the sample-data and Ollama utility endpoints~~ and ~~enforce a strong `SECRET_KEY` at startup~~ — **done** (64 of 69 operations now require auth; a placeholder secret refuses startup outside DEBUG). Rate-limit login, for example with `slowapi` | L10 |
 | 1.6 | Recalibrate volatility forecasts (isotonic or linear recalibration on a validation window), and evaluate quantile regression or an asymmetric loss to reduce under-forecasting in turbulent regimes | L1 |
 
 ### Phase 2 — Portfolio Tracking and Planning (medium term)
 
 | # | Item | Proposal feature |
 |---|---|---|
-| 2.1 | Holdings and transactions (buy/sell, fees), live valuation through Yahoo Finance, realised and unrealised P&L, XIRR; drive Portfolio Analytics and Diversification from real holdings instead of sample data; populate the dashboard value tiles | Portfolio tracking (L4) |
+| 2.1 | ~~Holdings and transactions, live valuation, realised and unrealised P&L; drive Portfolio Analytics and Diversification from real holdings; populate the dashboard tiles~~ — **done**. Remaining: XIRR / money-weighted return, and FIFO tax-lot tracking for LTCG/STCG reporting | L4, L6 |
 | 2.2 | Goal-based planning: multiple goals with target amounts and dates; required SIP per goal; probability of reaching each goal from Monte Carlo | Goal planning |
 | 2.3 | Retirement planning: corpus estimation with inflation, post-retirement withdrawals (sequence-of-returns risk via simulation), safe withdrawal rate | Retirement planning |
 | 2.4 | ETF and gold-price tracking: NSE ETFs, sovereign gold bonds, MCX gold proxies | ETF/gold tracking |
@@ -2606,7 +2887,7 @@ Future work is organised into four phases, in order of dependency and value.
 
 | # | Item | Proposal feature |
 |---|---|---|
-| 3.1 | Train and validate the Stock Predictor direction classifier, using the existing contract. It is deployed only if its Brier skill score over the base rate is positive with a bootstrap interval that excludes zero | Stock Predictor (L3) |
+| 3.1 | ~~Train and validate the Stock Predictor direction classifier~~ — **done, and it failed**: seven families were evaluated and none beat the base rate (Section 7.3.4). The acceptance gate remains in `scripts/evaluate_trend_classifier.py`, so a future model with richer features (order flow, fundamentals, news sentiment) deploys automatically if it clears the bar | L3 |
 | 3.2 | Mean–variance and risk-parity optimisation with constraints (long-only, sector caps), using the ML volatility forecasts and a shrunk covariance matrix | Portfolio optimisation |
 | 3.3 | Rebalancing alerts when allocation drifts beyond a tolerance band, with tax- and cost-aware suggestions | Rebalancing |
 | 3.4 | Conversational assistant: retrieval-augmented chat over the user's own results, with tool calls to the existing deterministic services and the same output guard applied to every answer | AI chat assistant |
@@ -2740,12 +3021,12 @@ Future work is organised into four phases, in order of dependency and value.
 | 19 | GET | `/api/recommendation/explain` | JWT | AI explanation of recommendation |
 | 20 | POST | `/api/portfolio-analysis/analyze` | JWT | Analyse portfolio series |
 | 21 | GET | `/api/portfolio-analysis/latest` | JWT | Latest analysis |
-| 22 | POST | `/api/portfolio-analysis/generate-sample-data` | – | Sample portfolio series |
+| 22 | POST | `/api/portfolio-analysis/generate-sample-data` | JWT | Sample portfolio series |
 | 23 | GET | `/api/portfolio-analysis/explain` | JWT | AI explanation of analysis |
 | 24 | POST | `/api/diversification-analysis/analyze` | JWT | Analyse holdings |
 | 25 | GET | `/api/diversification-analysis/latest` | JWT | Latest analysis |
 | 26 | GET | `/api/diversification-analysis/history` | JWT | Analysis history |
-| 27 | POST | `/api/diversification-analysis/generate-sample-holdings` | – | Sample holdings |
+| 27 | POST | `/api/diversification-analysis/generate-sample-holdings` | JWT | Sample holdings |
 | 28 | DELETE | `/api/diversification-analysis/{analysis_id}` | JWT | Delete analysis |
 | 29 | GET | `/api/diversification-analysis/explain` | JWT | AI explanation of diversification |
 | 30 | POST | `/api/monte-carlo/simulate` | JWT | Run simulation (`?save=false` to skip saving) |
@@ -2776,7 +3057,18 @@ Future work is organised into four phases, in order of dependency and value.
 | 55 | POST | `/api/ml/reload-trend-model` | JWT | Hot-reload trend model |
 | 56 | GET | `/api/ml/cache-status` | JWT | Price cache and artifact listing |
 | 57 | GET | `/api/ollama/health` | – | LLM availability |
-| 58 | GET | `/api/ollama/test` | – | LLM test generation |
+| 58 | GET | `/api/ollama/test` | JWT | LLM test generation |
+| 59 | GET | `/api/portfolio/overview` | JWT | Holdings and totals, all portfolios or one (`portfolio_id`) |
+| 60 | GET | `/api/portfolio/holdings/diversification` | JWT | Real holdings reshaped for the diversification analyzer, with sector coverage |
+| 61 | GET | `/api/portfolio/value-series` | JWT | Time-weighted daily value index for risk analytics |
+| 62 | POST | `/api/portfolio/` | JWT | Create a portfolio |
+| 63 | GET | `/api/portfolio/` | JWT | List portfolios |
+| 64 | GET | `/api/portfolio/{portfolio_id}` | JWT | Portfolio with derived holdings and totals |
+| 65 | PUT | `/api/portfolio/{portfolio_id}` | JWT | Rename or annotate a portfolio |
+| 66 | DELETE | `/api/portfolio/{portfolio_id}` | JWT | Delete a portfolio and its transactions |
+| 67 | POST | `/api/portfolio/{portfolio_id}/transactions` | JWT | Record a buy, sell, SIP instalment or dividend |
+| 68 | GET | `/api/portfolio/{portfolio_id}/transactions` | JWT | Transaction ledger |
+| 69 | DELETE | `/api/portfolio/{portfolio_id}/transactions/{transaction_id}` | JWT | Delete a transaction (refused if a later sale depends on it) |
 
 ## Appendix B — Feature Dictionary
 
@@ -2809,6 +3101,9 @@ Future work is organised into four phases, in order of dependency and value.
 | Test results (Chapter 6) | `cd backend && pytest -q` |
 | Volatility model evaluation (Section 7.3) | `python scripts/train_volatility_model.py --dry-run --garch` (needs network access on first run for Yahoo Finance; results vary slightly as new data arrives) |
 | Model metadata | `GET /api/ml/model-info` |
+| Direction finding (Section 7.3.4) | `python scripts/evaluate_trend_classifier.py` from `backend/` |
+| Range coverage (Section 7.3.5) | `python scripts/validate_expected_range.py` from `backend/` |
+| Portfolio accounting (Table 7.2a) | Seed the demo ledger, then `GET /api/portfolio/overview` |
 | Monte Carlo validation (Table 7.5) | `MonteCarloSimulator.run_simulation(100000, 0.12, 0.15, 10, 10000, 0, random_seed=42)` |
 | Monte Carlo example (Table 7.6) | Monte Carlo page: ₹1,00,000, ₹5,000/month, 10 years, 12%, "Use ML volatility" for RELIANCE.NS, 10,000 paths, seed 42 |
 | Risk and allocation (Tables 7.2–7.3) | Demo profile (age 28, ₹85,000, ₹25,000, 10+ Years, High) → Risk → Recommendations |
