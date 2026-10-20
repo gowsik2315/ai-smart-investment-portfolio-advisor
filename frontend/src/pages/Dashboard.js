@@ -7,16 +7,21 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
+import Loading from '../components/common/Loading';
 import profileService from '../services/profileService';
 import riskService from '../services/riskService';
 import recommendationService from '../services/recommendationService';
 import portfolioAnalysisService from '../services/portfolioAnalysisService';
+import portfolioService from '../services/portfolioService';
+import sipService from '../services/sipService';
 
 const Dashboard = () => {
   const [profile, setProfile] = useState(null);
   const [riskProfile, setRiskProfile] = useState(null);
   const [recommendation, setRecommendation] = useState(null);
   const [portfolioAnalysis, setPortfolioAnalysis] = useState(null);
+  const [overview, setOverview] = useState(null);
+  const [sipPlans, setSipPlans] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,10 +29,27 @@ const Dashboard = () => {
   }, []);
 
   const fetchData = async () => {
+    // Portfolio totals and SIPs are independent of the financial profile,
+    // so they are fetched outside the block below: a user with holdings
+    // but no profile yet should still see their real numbers.
+    try {
+      const overviewData = await portfolioService.getOverview();
+      setOverview(overviewData);
+    } catch (err) {
+      console.log('No portfolio data found');
+    }
+
+    try {
+      const plans = await sipService.getPlans('Active');
+      setSipPlans(plans || []);
+    } catch (err) {
+      console.log('No SIP plans found');
+    }
+
     try {
       const profileData = await profileService.getProfile();
       setProfile(profileData);
-      
+
       // Try to fetch risk profile
       try {
         const riskData = await riskService.getRiskProfile();
@@ -62,6 +84,31 @@ const Dashboard = () => {
     }
   };
 
+  const formatCurrency = (value) =>
+    new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(value || 0);
+
+  // Zeros until the user records transactions, so the tiles render the
+  // same way whether or not a portfolio exists.
+  const summary = overview?.summary || {
+    current_value: 0,
+    invested_amount: 0,
+    total_gain: 0,
+    total_return_percent: 0,
+    num_holdings: 0,
+    holdings_priced_from_last_trade: 0,
+  };
+
+  const returnsClass = summary.total_gain >= 0 ? 'text-green-600' : 'text-red-600';
+  const monthlySIP = sipPlans.reduce((sum, plan) => sum + (plan.investment_amount || 0), 0);
+
+  // Wait for the first fetch rather than rendering zeros and then
+  // snapping to real values, which reads as a portfolio losing its money.
+  if (loading) return <Loading message="Loading your dashboard..." />;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -73,28 +120,57 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card>
           <p className="text-secondary-600 text-sm mb-1">Total Portfolio Value</p>
-          <h2 className="text-3xl font-bold text-primary-600">₹0</h2>
-          <p className="text-sm text-green-600 mt-2">+0% this month</p>
+          <h2 className="text-3xl font-bold text-primary-600">
+            {formatCurrency(summary.current_value)}
+          </h2>
+          <p className="text-sm text-secondary-600 mt-2">
+            {summary.num_holdings > 0
+              ? `${summary.num_holdings} holding${summary.num_holdings === 1 ? '' : 's'}`
+              : 'No holdings recorded yet'}
+          </p>
         </Card>
 
         <Card>
           <p className="text-secondary-600 text-sm mb-1">Total Invested</p>
-          <h2 className="text-3xl font-bold">₹0</h2>
-          <p className="text-sm text-secondary-600 mt-2">Across all assets</p>
+          <h2 className="text-3xl font-bold">{formatCurrency(summary.invested_amount)}</h2>
+          <p className="text-sm text-secondary-600 mt-2">
+            {overview?.num_portfolios > 0
+              ? `Across ${overview.num_portfolios} portfolio${overview.num_portfolios === 1 ? '' : 's'}`
+              : 'Across all assets'}
+          </p>
         </Card>
 
         <Card>
           <p className="text-secondary-600 text-sm mb-1">Current Returns</p>
-          <h2 className="text-3xl font-bold text-green-600">₹0</h2>
-          <p className="text-sm text-secondary-600 mt-2">0% gain</p>
+          <h2 className={`text-3xl font-bold ${returnsClass}`}>
+            {formatCurrency(summary.total_gain)}
+          </h2>
+          <p className={`text-sm mt-2 ${returnsClass}`}>
+            {summary.total_return_percent >= 0 ? '+' : ''}
+            {summary.total_return_percent}% gain
+          </p>
         </Card>
 
         <Card>
           <p className="text-secondary-600 text-sm mb-1">Active SIPs</p>
-          <h2 className="text-3xl font-bold">0</h2>
-          <p className="text-sm text-secondary-600 mt-2">Monthly investment: ₹0</p>
+          <h2 className="text-3xl font-bold">{sipPlans.length}</h2>
+          <p className="text-sm text-secondary-600 mt-2">
+            Monthly investment: {formatCurrency(monthlySIP)}
+          </p>
         </Card>
       </div>
+
+      {summary.holdings_priced_from_last_trade > 0 && (
+        <div className="mb-8 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+          {summary.holdings_priced_from_last_trade} holding
+          {summary.holdings_priced_from_last_trade === 1 ? '' : 's'} could not be priced
+          live and {summary.holdings_priced_from_last_trade === 1 ? 'is' : 'are'} valued at
+          their last transaction price.{' '}
+          <Link to="/portfolio" className="underline">
+            Review portfolio
+          </Link>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="mb-8">

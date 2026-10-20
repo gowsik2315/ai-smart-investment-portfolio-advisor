@@ -9,7 +9,7 @@ and login.
 
 ```bash
 cd backend
-pytest                              # 336 tests
+pytest                              # 406 tests
 pytest tests/test_security.py -v    # one module, verbose
 pytest -k volatility                # by keyword
 ```

@@ -19,6 +19,7 @@ from app.api import (
     sip,
     market,
     recommendation,
+    portfolio,
     portfolio_analysis,
     diversification_analysis,
     monte_carlo,
@@ -105,6 +106,7 @@ app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=
 app.include_router(profile.router, prefix=f"{settings.API_V1_PREFIX}/profile", tags=["Profile"])
 app.include_router(risk.router, prefix=f"{settings.API_V1_PREFIX}/risk", tags=["Risk Assessment"])
 app.include_router(recommendation.router, prefix=f"{settings.API_V1_PREFIX}/recommendation", tags=["Portfolio Recommendation"])
+app.include_router(portfolio.router, prefix=f"{settings.API_V1_PREFIX}/portfolio", tags=["Portfolio Tracking"])
 app.include_router(portfolio_analysis.router, prefix=f"{settings.API_V1_PREFIX}/portfolio-analysis", tags=["Portfolio Analysis"])
 app.include_router(diversification_analysis.router, prefix=f"{settings.API_V1_PREFIX}/diversification-analysis", tags=["Diversification Analysis"])
 app.include_router(monte_carlo.router, prefix=f"{settings.API_V1_PREFIX}/monte-carlo", tags=["Monte Carlo Simulation"])

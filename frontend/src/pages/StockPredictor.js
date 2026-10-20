@@ -325,10 +325,33 @@ const StockPredictor = () => {
               </div>
             ) : (
               <div role="status" className="mb-6 p-4 rounded bg-amber-50 text-amber-900 text-sm">
-                <strong>Not a prediction.</strong> No trained trend model is loaded, so the
-                probability below is this stock’s own historical frequency of rising over 21
-                trading days ({pct(outlook.base_rate_up)} of recent windows). It describes the
-                past, and says nothing about the next month.
+                <strong>Not a prediction.</strong> The probability below is this stock’s own
+                historical frequency of rising over 21 trading days (
+                {pct(outlook.base_rate_up)} of recent windows). It describes the past, and
+                says nothing about the next month.
+                <details className="mt-2">
+                  <summary className="cursor-pointer underline">
+                    Why isn’t there a model here?
+                  </summary>
+                  <p className="mt-2">
+                    There is one deliberately. Seven classifiers (logistic regression,
+                    random forest and gradient boosting) were trained on 17,390 rows and
+                    scored on 4,390 untouched ones. <strong>None beat this base rate.</strong>{' '}
+                    The best managed a Brier skill of −0.0012, with a 95% confidence
+                    interval of −0.014 to +0.011 — indistinguishable from simply quoting
+                    history. Bigger models did worse, which is what fitting noise looks
+                    like.
+                  </p>
+                  <p className="mt-2">
+                    One-month direction is close to unpredictable from price history alone,
+                    so showing an unvalidated number here would be dishonest. The expected
+                    price range below <em>is</em> validated, and that is where this page’s
+                    value lies. Reproduce the finding with{' '}
+                    <code>scripts/evaluate_trend_classifier.py</code>; if a model ever
+                    clears the bar, it is deployed automatically and this notice
+                    disappears.
+                  </p>
+                </details>
               </div>
             )}
 
@@ -424,6 +447,14 @@ const StockPredictor = () => {
                     : 'trailing 21-day realised, not an ML forecast'}
                   ). Centred on today’s price: it shows how far, not which way.
                 </p>
+                {outlook.volatility_source === 'ml_predicted' && (
+                  <p className="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1.5">
+                    <strong>Checked against history.</strong> Over 4,450 out-of-sample
+                    windows the 95% band contained the price <strong>94.8%</strong> of the
+                    time and the 68% band <strong>71.5%</strong> — close to what they
+                    claim. This is the part of the page that is validated.
+                  </p>
+                )}
               </Card>
             </div>
 

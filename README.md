@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-green.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-336%20passing-brightgreen.svg)](backend/tests/)
+[![Tests](https://img.shields.io/badge/tests-406%20passing-brightgreen.svg)](backend/tests/)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -48,17 +48,40 @@ The **AI Smart Investment Portfolio Advisor** is a comprehensive financial manag
 - Sector-wise distribution
 - Rebalancing suggestions
 
+### 💼 Portfolio Tracking
+- Record buys, sells, SIP instalments and dividends against named portfolios
+- Holdings, cost basis and P&L are **derived from the transaction ledger**
+  (average-cost accounting), never stored, so they cannot drift out of step
+- Live valuation from yfinance; a holding that cannot be priced falls back to
+  its last transaction price and is **labelled** `last_transaction_price`
+- Realised vs unrealised profit, dividend income, per-holding weights
+- A sale larger than the quantity held on that date is rejected, so the stored
+  history can never describe an impossible position
+- Feeds real holdings into Diversification Analysis
+
 ### 📈 Portfolio Analytics
-- Real-time performance tracking
-- Returns calculation (daily, weekly, monthly, yearly)
-- Risk metrics (Sharpe ratio, volatility, beta)
-- Benchmark comparison
+- **Runs on your real holdings**: the daily value series is rebuilt from your
+  transaction ledger and historical prices
+- Analyses all portfolios combined by default, or one in isolation, so two
+  strategies can be compared
+- Charted as an index rebased to 100, never in rupees: cashflows are excluded,
+  so its level is not your balance and must not be read as one
+- **Time-weighted**, so deposits and withdrawals are not mistaken for returns —
+  the convention funds use to report performance independently of cashflows
+- Annualised volatility, Sharpe ratio, maximum drawdown, composite risk score
+- Holdings with no price history are excluded and reported, because carrying
+  them at a flat value would understate volatility
+- Sample data still available, explicitly labelled as not your portfolio
 
 ### 🌈 Diversification Analysis
-- Sector diversification scoring
-- Asset class distribution
-- Concentration risk identification
-- Optimization recommendations
+- **Runs on your real holdings** from Portfolio Tracking, valued at current prices
+- Analyses all portfolios combined by default, or one in isolation
+- Sectors resolved automatically from market data (no manual tagging)
+- Reports what share of the portfolio by value could actually be classified,
+  so a score built on unknown sectors is never passed off as a verdict
+- Sector diversification scoring, asset class distribution, HHI
+- Concentration risk identification and recommendations
+- Sample data still available, explicitly labelled as not your portfolio
 
 ### 🎲 Monte Carlo Simulation
 - 10,000+ simulation runs
@@ -99,8 +122,16 @@ The **AI Smart Investment Portfolio Advisor** is a comprehensive financial manag
   rise, and an expected price range drawn as a fan chart
 - Reports the stock's own **historical base rate** beside the probability,
   because most large stocks rise more often than they fall over a month
-- Until a classifier is trained, the probability *is* that base rate and the
-  page says so ("Not a prediction") rather than passing it off as ML
+- **Direction was tested and found unpredictable.** Seven classifiers were
+  scored on 4,390 untouched rows and none beat that base rate (best Brier
+  skill −0.0012, 95% interval −0.014 to +0.011). So the probability shown
+  *is* the base rate, labelled "Not a prediction", with the evidence one
+  click away — rather than an unvalidated number dressed up as ML
+- **The expected range is the validated part, and is the module's real
+  output.** Backtested over 4,450 out-of-sample windows: the 95% band
+  contained the price 94.8% of the time (nominal 95%), the 68% band 71.5%
+  (nominal 68.3%). It also beats trailing realised volatility, which manages
+  only 91.7% at the 95% level
 - The range is centred on today's price: it shows how far, not which way
 - An optional **Explain** button writes a plain-language reading with the
   local LLM; its output is checked by a deterministic guard that rejects
@@ -229,13 +260,14 @@ AI Smart Investment Portfolio Advisor/
 │   │
 │   ├── alembic/                      # Database migrations
 │   │   └── versions/
-│   ├── tests/                        # pytest suite (336 tests)
+│   ├── tests/                        # pytest suite (406 tests)
 │   ├── ml/                           # Offline dataset scripts
 │   │   ├── generate_investor_dataset.py    # Synthetic (unused by app)
 │   │   ├── prepare_volatility_dataset.py   # Real NSE price panel
 │   │   └── prepare_trend_dataset.py        # Up/down labels, same features
-│   ├── scripts/                      # Training entry points
-│   │   └── train_volatility_model.py # Train, evaluate, conditionally save
+│   ├── scripts/                      # Training / evaluation entry points
+│   │   ├── train_volatility_model.py # Train, evaluate, conditionally save
+│   │   └── evaluate_trend_classifier.py  # Direction: tests 7 models, saves only on a real edge
 │   ├── models/                       # Trained artifacts (gitignored)
 │   ├── data_cache/                   # Parquet price cache (gitignored)
 │   ├── datasets/                     # Generated datasets (gitignored)
@@ -352,6 +384,14 @@ include the slow GARCH baseline). It saves only if the model beats naive
 persistence on both RMSE and QLIKE, and it verifies that the date-based
 embargo really is 21 trading dates rather than trusting it.
 
+To re-run the direction experiment, run
+`python scripts/evaluate_trend_classifier.py` from `backend/`. It trains
+seven classifiers, scores them on Brier skill against the training-period
+base rate (never against 50%), and puts a 95% block-bootstrap interval on
+the best one. It saves a model **only** if that interval excludes zero, so
+a merely-lucky candidate cannot reach the Stock Predictor. On the current
+data nothing qualifies, and the script says so.
+
 ```bash
 POST /api/ml/predict-volatility   {"ticker": "RELIANCE.NS"}
 GET  /api/ml/model-info           # is a volatility model loaded, and which
@@ -462,7 +502,7 @@ User Input → React Frontend → FastAPI Backend → Services Layer
 ### Automated tests
 ```bash
 cd backend
-pytest                 # 336 tests
+pytest                 # 406 tests
 ```
 
 Covers the Monte Carlo simulator's maths (including closed-form drift
@@ -479,6 +519,7 @@ cd backend
 python ml/generate_investor_dataset.py       # 50,000 synthetic investor profiles
 python -m ml.prepare_volatility_dataset      # real NSE price panel for volatility training
 python scripts/train_volatility_model.py --dry-run   # train + evaluate the volatility model, saves nothing
+python scripts/evaluate_trend_classifier.py          # can direction beat the base rate? (expected answer: no)
 ```
 
 These are two unrelated datasets - see **Machine Learning** below.
@@ -535,6 +576,20 @@ These are two unrelated datasets - see **Machine Learning** below.
    user; it needs an admin role.
 7. **`verify_password` retains a plain-text fallback** so dev accounts
    predating bcrypt still work. Remove it before production.
+8. **Sector is resolved from market data, not stored.** A transaction
+   records the asset type but not the sector, so sectors are looked up
+   from the market-data provider for holdings that have a ticker (gold
+   and bonds are treated as their own sector). A holding with no ticker
+   — unlisted equity, a fund without a symbol — stays `Unclassified`
+   rather than being guessed, and the Diversification page reports what
+   share of the portfolio by value that affects.
+9. **Two different return figures, on purpose.** Portfolio Tracking shows a
+   simple return on what you put in (money-weighted, what your money did).
+   Portfolio Analytics shows a time-weighted return that strips out
+   deposits (what the investments did). They will not match, and both are
+   correct for their question. XIRR is future work.
+10. **Cost basis is average-cost only.** FIFO and tax-lot tracking (needed
+    for Indian LTCG/STCG reporting) are not implemented.
 
 ### Troubleshooting
 - **Frontend takes 3+ minutes to compile the first time** on Windows.
@@ -555,7 +610,8 @@ These are two unrelated datasets - see **Machine Learning** below.
 - [x] Financial profile management
 - [x] Risk assessment with AI
 - [x] Portfolio recommendations
-- [x] Portfolio tracking and analytics
+- [x] Portfolio tracking (transaction ledger, derived holdings, live P&L)
+- [x] Portfolio analytics
 - [x] Diversification analysis
 - [x] Monte Carlo simulations
 - [x] SIP calculator
@@ -566,11 +622,17 @@ These are two unrelated datasets - see **Machine Learning** below.
 - [x] ML integration seam — feature pipeline, artifact contract,
       prediction service with fallback, `/api/ml/*` endpoints
 - [x] Geometric Brownian motion Monte Carlo with VaR/CVaR
-- [x] Alembic migrations, 336 automated tests
+- [x] Alembic migrations, 406 automated tests
 - [x] **Volatility model trained and evaluated** against naive persistence,
       HAR and GARCH(1,1) (`scripts/train_volatility_model.py`); the artifact
       is local, not committed
-- [ ] Train the Stock Predictor's trend classifier
+- [x] **Stock Predictor trend classifier evaluated — no edge found.** Seven
+      candidates (logistic regression, random forest, gradient boosting) scored
+      on 4,390 untouched rows; none beat the historical base rate. Best Brier
+      skill -0.0012, 95% interval -0.014 to +0.011. Reproduce with
+      `scripts/evaluate_trend_classifier.py`; it deploys a model automatically
+      if one ever clears the bar
+- [ ] XIRR / time-weighted returns, and FIFO tax-lot tracking
 - [ ] Advanced portfolio optimization algorithms
 - [ ] Tax optimization strategies
 - [ ] Multi-currency support
@@ -647,10 +709,10 @@ For setup issues or questions:
 
 ## 📊 Project Statistics
 
-- **Backend endpoints**: 58 operations across 47 paths
+- **Backend endpoints**: 69 operations across 54 paths
 - **Frontend pages**: 15
 - **Database tables**: 10 (+ Alembic migrations)
-- **Automated tests**: 336
+- **Automated tests**: 406
 - **AI explanation endpoints**: 8 (`/api/*/explain`)
 - **Volatility features**: 21, over a 10-ticker NSE panel
 - **Synthetic investor dataset**: 50,000 rows (unused by the app — see
@@ -662,7 +724,7 @@ For setup issues or questions:
 
 **Version**: 1.0.0  
 **Last Updated**: October 2026  
-**Status**: Functional; the volatility model is trained locally (not committed), the trend classifier is not yet trained
+**Status**: Functional. The volatility model is trained locally (not committed). A trend classifier was evaluated and rejected: none of seven candidates beat the historical base rate, so the Stock Predictor shows that base rate, labelled honestly, and derives its value from the validated expected price range.
 
 ---
 

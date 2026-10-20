@@ -24,9 +24,9 @@ Built as a personal/academic project, not deployed.
 - **LLM:** Ollama running `qwen2.5:3b` locally (CPU, ~10 tokens/sec)
 - **Market data:** Yahoo Finance via `yfinance` — no API key needed
 - **ML:** scikit-learn, with `arch`/`statsmodels` for baselines
-- 58 API operations, 15 frontend pages, 336 passing tests
+- 69 API operations, 15 frontend pages, 406 passing tests
 
-## The ten modules
+## The eleven modules
 
 | Module | What it does | How |
 |---|---|---|
@@ -34,12 +34,13 @@ Built as a personal/academic project, not deployed.
 | Financial Profile | Age, income, savings, horizon, goal | Stored per user |
 | Risk Assessment | Score 0-100 → Conservative / Moderate / Aggressive | **Rule-based** weighted formula |
 | Portfolio Recommendation | Allocation across stocks / funds / gold / emergency | **Rule-based** templates by risk score |
-| Portfolio Analytics | Volatility, Sharpe ratio, max drawdown | Computed from a value series |
+| Portfolio Tracking | Holdings, live valuation, realised/unrealised P&L | Transaction ledger; holdings **derived** by average-cost accounting |
+| Portfolio Analytics | Volatility, Sharpe ratio, max drawdown | Time-weighted value series rebuilt from the ledger + price history |
 | Diversification Analysis | Concentration score, warnings | HHI + **sector labels supplied by the caller** |
 | Monte Carlo | 10,000 simulated 10-year paths, VaR/CVaR | Geometric Brownian motion |
 | SIP Planner | Monthly investment projections | Compound interest formula |
 | Stock Explorer | Price, history, company info | yfinance |
-| Stock Predictor | 21-day outlook: current trend, probability of a rise, expected price range | Technical signals + **classifier (not yet trained)**; falls back to the stock's own historical base rate |
+| Stock Predictor | 21-day outlook: current trend, probability of a rise, expected price range | Technical signals + **classifier evaluated and rejected (no edge)**; shows the stock's own historical base rate, labelled. The expected range is validated and is the module's real output |
 
 ## Three separate AI/ML features — do not conflate them
 
@@ -56,8 +57,8 @@ Built as a personal/academic project, not deployed.
 
 ## Current state
 
-**Working:** all ten modules, end to end, frontend and backend. Auth
-enforced on every data endpoint, per-user data scoping, 336 tests,
+**Working:** all eleven modules, end to end, frontend and backend. Auth
+enforced on every data endpoint, per-user data scoping, 406 tests,
 Alembic migrations, pushed to a private GitHub repo.
 
 **Trained locally:** the volatility model (a ridge regression on
@@ -68,8 +69,43 @@ to +10.8%), and its forecasts are compressed toward the average (predicted
 18-31% against an actual 8-56%). Model files are git-ignored, so a fresh clone
 falls back to `historical_fallback` until the script is run.
 
-**Not done:** the Stock Predictor's trend classifier. The page labels the
-base rate "Not a prediction" until one is trained.
+**Evaluated and rejected:** the Stock Predictor's trend classifier.
+Seven candidates were scored on 4,390 untouched rows and none beat the
+historical base rate (best Brier skill -0.0012, 95% interval -0.014 to
++0.011; larger models did worse, the signature of fitting noise). The
+regime also flipped between halves — 58.3% of training windows rose
+against 45.6% in test — so a model that learned "things go up" was
+over-optimistic. This is a legitimate negative result, not an unfinished
+task: one-month direction is close to unpredictable from price history.
+`scripts/evaluate_trend_classifier.py` reproduces it and deploys a model
+automatically if one ever clears the bar.
+
+**Validated instead:** the expected price range. Backtested over 4,450
+out-of-sample windows, the 95% band contained the price 94.8% of the time
+(nominal 95%) and the 68% band 71.5% (nominal 68.3%) — and it beats
+trailing realised volatility, which manages only 91.7% at the 95% level.
+That range, not the direction, is what the module is for.
+
+**Portfolio Tracking (added):** transactions drive everything. Holdings,
+cost basis and P&L are derived from the ledger on every read by
+average-cost accounting, so no stored position can drift out of step.
+Live prices come from yfinance; a holding that cannot be priced falls
+back to its last transaction price and is labelled
+`last_transaction_price`, the same way the volatility service labels its
+historical fallback. Sector comes from the same Yahoo response as the
+price, so classifying a holding costs no extra call; holdings with no
+ticker stay "Unclassified" rather than guessed, and the Diversification
+page states what share of the portfolio by value that covers.
+Diversification Analysis and Portfolio Analytics both run on these real
+holdings, with sample data kept as an explicitly labelled alternative.
+Both span every portfolio by default and accept a `portfolio_id` to scope
+to one; holdings are keyed by asset, so the same stock held in two
+portfolios is one position.
+Analytics rebuilds a daily value series as a TIME-WEIGHTED index: each
+day's return comes from price movement only, so a deposit is never read
+as a gain. A naive total-it-up series gets this badly wrong — on flat
+prices with regular deposits it reports 600% return and 406% volatility
+where the truth is zero and zero.
 
 **Also outstanding:** SQLite → PostgreSQL, real deployment (AWS),
 `SECRET_KEY` is still a placeholder.
@@ -105,8 +141,9 @@ base rate "Not a prediction" until one is trained.
 
 ## Open questions to decide
 
-1. **The trend classifier** still has to be trained and must beat the
-   historical base rate on Brier skill. The volatility model is trained: a
+1. **The trend classifier is settled: no edge.** Seven candidates were
+   evaluated and none beat the base rate, which is reported as a finding
+   rather than carried as a TODO. The volatility model is trained: a
    one-standard-error rule chose ridge over RandomForest and HistGradientBoosting
    because the three were within cross-validation noise of each other.
 2. **Whether to add any further ML.** Three candidates discussed:
